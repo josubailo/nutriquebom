@@ -3,9 +3,12 @@ import {
   Users, CalendarDays, Activity, FlaskConical, UserCircle, Utensils,
   Plus, Search, X, Copy, ChevronDown, ChevronUp, Pencil, Trash2,
   ArrowLeft, FileDown, Save, ClipboardList, Pill, Repeat, Mail, Phone, Cake,
-  Camera, Ruler, Scale, TrendingUp, Percent, ImageIcon, Apple, FileText
+  Camera, Ruler, Scale, TrendingUp, Percent, ImageIcon, Apple, FileText, LogOut
 } from "lucide-react";
-import { storage } from "./storage";
+import { supabase } from "./supabase";
+import * as db from "./db";
+import Login from "./Login";
+import PatientPortal from "./PatientPortal";
 
 /* ============================================================
    NutriPlano — app de nutrição (nome provisório, fácil de trocar)
@@ -649,6 +652,31 @@ function NumInput({ value, onChange, className, ...props }) {
 
 /* ============================================================ */
 export default function App() {
+  /* ── Auth ── */
+  const [user, setUser]               = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [profile, setProfile]         = useState(null); // perfil Supabase (role)
+  const [patientData, setPatientData] = useState(null); // dados do portal do paciente
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  /* ── Carrega role quando user muda ── */
+  useEffect(() => {
+    if (!user) { setProfile(null); setPatientData(null); return; }
+    supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
+      .then(({ data }) => setProfile(data));
+  }, [user]);
+
+  /* ── Dados do app ── */
   const seedFoods = () => FOODS.map((f) => ({ ...f, m: f.m ? f.m.map((x) => [...x]) : undefined, mc: { ...(f.mc || {}) } }));
   const [data, setData] = useState({ patients: [], diets: {}, appointments: [], assessments: {}, exams: {}, foods: seedFoods(), anamneseTemplate: DEFAULT_ANAMNESE, anamnese: {}, profile: {} });
   const [loaded, setLoaded] = useState(false);
@@ -656,69 +684,137 @@ export default function App() {
   const [activePatient, setActivePatient] = useState(null);
   const [activeDiet, setActiveDiet] = useState(null);
 
-  // carregar
+  /* ── Carrega dados do Supabase quando nutricionista loga ── */
   useEffect(() => {
-    (async () => {
-      try {
-        const r = await storage.get("nutri:data");
-        if (r && r.value) {
-          const parsed = JSON.parse(r.value);
-          const foods = parsed.foods || [...seedFoods(), ...(parsed.customFoods || [])];
-          setData({ patients: [], diets: {}, appointments: [], assessments: {}, exams: {}, anamnese: {}, profile: {}, ...parsed, foods, anamneseTemplate: parsed.anamneseTemplate || DEFAULT_ANAMNESE });
-        }
-      }
-      catch (e) { /* sem dados ainda */ }
+    if (!user || !profile) return;
+    if (profile.role === 'patient') {
+      db.loadPatientData(user.id).then(setPatientData);
       setLoaded(true);
-    })();
-  }, []);
-  // salvar (debounce)
-  useEffect(() => {
-    if (!loaded) return;
-    const t = setTimeout(() => { storage.set("nutri:data", JSON.stringify(data)).catch(() => {}); }, 400);
-    return () => clearTimeout(t);
-  }, [data, loaded]);
+      return;
+    }
+    // nutricionista
+    db.loadAll(user.id).then((remote) => {
+      const customFoods = (remote.customFoods || []).map(f => ({ ...f, custom: true, g: f.g || "Meus Alimentos" }));
+      setData(d => ({
+        ...d,
+        patients:         remote.patients || [],
+        diets:            remote.diets || {},
+        assessments:      remote.assessments || {},
+        exams:            remote.exams || {},
+        anamnese:         remote.anamnese || {},
+        appointments:     remote.appointments || [],
+        profile:          remote.profile || {},
+        anamneseTemplate: remote.anamneseTemplate || DEFAULT_ANAMNESE,
+        foods:            [...seedFoods(), ...customFoods],
+      }));
+      setLoaded(true);
+    });
+  }, [user, profile]);
 
+  /* ── CRUD — cada operação atualiza estado local E salva no Supabase ── */
   const patients = data.patients;
-  const dietsOf = (pid) => data.diets[pid] || [];
+  const dietsOf  = (pid) => data.diets[pid] || [];
 
-  const addPatient = (p) => setData((d) => ({ ...d, patients: [{ id: uid(), createdAt: Date.now(), ...p }, ...d.patients] }));
-  const saveDiet = (pid, diet) =>
+  const addPatient = (p) => {
+    const novo = { id: uid(), createdAt: Date.now(), ...p };
+    setData((d) => ({ ...d, patients: [novo, ...d.patients] }));
+    db.insertPatient(user.id, novo);
+  };
+
+  const saveDiet = (pid, diet) => {
     setData((d) => {
-      const list = d.diets[pid] || [];
+      const list   = d.diets[pid] || [];
       const exists = list.some((x) => x.id === diet.id);
-      const upd = exists ? list.map((x) => (x.id === diet.id ? diet : x)) : [diet, ...list];
+      const upd    = exists ? list.map((x) => (x.id === diet.id ? diet : x)) : [diet, ...list];
       return { ...d, diets: { ...d.diets, [pid]: upd } };
     });
-  const delDiet = (pid, did) => setData((d) => ({ ...d, diets: { ...d.diets, [pid]: (d.diets[pid] || []).filter((x) => x.id !== did) } }));
-  const addAppt = (a) => setData((d) => ({ ...d, appointments: [...d.appointments, { id: uid(), ...a }] }));
-  const saveAssessment = (pid, asmt) =>
+    db.upsertDiet(user.id, pid, diet);
+  };
+
+  const delDiet = (pid, did) => {
+    setData((d) => ({ ...d, diets: { ...d.diets, [pid]: (d.diets[pid] || []).filter((x) => x.id !== did) } }));
+    db.deleteDiet(user.id, did);
+  };
+
+  const addAppt = (a) => {
+    const novo = { id: uid(), ...a };
+    setData((d) => ({ ...d, appointments: [...d.appointments, novo] }));
+    db.insertAppointment(user.id, novo);
+  };
+
+  const saveAssessment = (pid, asmt) => {
     setData((d) => {
-      const list = d.assessments[pid] || [];
+      const list   = d.assessments[pid] || [];
       const exists = list.some((x) => x.id === asmt.id);
-      const upd = exists ? list.map((x) => (x.id === asmt.id ? asmt : x)) : [asmt, ...list];
+      const upd    = exists ? list.map((x) => (x.id === asmt.id ? asmt : x)) : [asmt, ...list];
       return { ...d, assessments: { ...d.assessments, [pid]: upd } };
     });
-  const delAssessment = (pid, aid) => setData((d) => ({ ...d, assessments: { ...d.assessments, [pid]: (d.assessments[pid] || []).filter((x) => x.id !== aid) } }));
+    db.upsertAssessment(user.id, pid, asmt);
+  };
+
+  const delAssessment = (pid, aid) => {
+    setData((d) => ({ ...d, assessments: { ...d.assessments, [pid]: (d.assessments[pid] || []).filter((x) => x.id !== aid) } }));
+    db.deleteAssessment(user.id, aid);
+  };
+
   const assessOf = (pid) => data.assessments[pid] || [];
 
-  const openNewDiet = (p) => { setActivePatient(p); setActiveDiet(newDiet(p)); setView("builder"); };
-  const openDiet = (p, diet) => { setActivePatient(p); setActiveDiet(JSON.parse(JSON.stringify(diet))); setView("builder"); };
+  const openNewDiet  = (p) => { setActivePatient(p); setActiveDiet(newDiet(p)); setView("builder"); };
+  const openDiet     = (p, diet) => { setActivePatient(p); setActiveDiet(JSON.parse(JSON.stringify(diet))); setView("builder"); };
   const openAssessment = (p) => { setActivePatient(p); setView("assessment"); };
-  const examsOf = (pid) => data.exams?.[pid] || [];
-  const saveExam = (pid, exam) => setData((d) => ({ ...d, exams: { ...d.exams, [pid]: [{ id: uid(), ...exam }, ...(d.exams?.[pid] || [])] } }));
-  const delExam = (pid, eid) => setData((d) => ({ ...d, exams: { ...d.exams, [pid]: (d.exams?.[pid] || []).filter((x) => x.id !== eid) } }));
-  const openExams = (p) => { setActivePatient(p); setView("exams"); };
-  const openAnamnese = (p) => { setActivePatient(p); setView("anamnese"); };
-  const anamneseOf = (pid) => data.anamnese?.[pid] || {};
-  const saveAnamnese = (pid, answers) => setData((d) => ({ ...d, anamnese: { ...d.anamnese, [pid]: answers } }));
-  const saveTemplate = (t) => setData((d) => ({ ...d, anamneseTemplate: t }));
-  const saveProfile = (p) => setData((d) => ({ ...d, profile: p }));
 
-  const foods = data.foods || [];
-  const addFood = (f) => setData((d) => ({ ...d, foods: [{ id: "c" + uid(), custom: true, g: f.g || "Meus Alimentos", ...f }, ...(d.foods || [])] }));
-  const updateFood = (id, patch) => setData((d) => ({ ...d, foods: (d.foods || []).map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
-  const delFood = (id) => setData((d) => ({ ...d, foods: (d.foods || []).filter((x) => x.id !== id) }));
+  const examsOf  = (pid) => data.exams?.[pid] || [];
+  const saveExam = (pid, exam) => {
+    const novo = { id: uid(), ...exam };
+    setData((d) => ({ ...d, exams: { ...d.exams, [pid]: [novo, ...(d.exams?.[pid] || [])] } }));
+    db.insertExam(user.id, pid, novo);
+  };
+  const delExam = (pid, eid) => {
+    setData((d) => ({ ...d, exams: { ...d.exams, [pid]: (d.exams?.[pid] || []).filter((x) => x.id !== eid) } }));
+    db.deleteExam(user.id, eid);
+  };
+
+  const openExams    = (p) => { setActivePatient(p); setView("exams"); };
+  const openAnamnese = (p) => { setActivePatient(p); setView("anamnese"); };
+  const anamneseOf   = (pid) => data.anamnese?.[pid] || {};
+
+  const saveAnamnese = (pid, answers) => {
+    setData((d) => ({ ...d, anamnese: { ...d.anamnese, [pid]: answers } }));
+    db.upsertAnamnese(user.id, pid, answers);
+  };
+
+  const saveTemplate = (t) => {
+    setData((d) => ({ ...d, anamneseTemplate: t }));
+    db.upsertSettings(user.id, { profile: data.profile, anamneseTemplate: t });
+  };
+
+  const saveProfile = (p) => {
+    setData((d) => ({ ...d, profile: p }));
+    db.upsertSettings(user.id, { profile: p, anamneseTemplate: data.anamneseTemplate });
+  };
+
+  const foods      = data.foods || [];
+  const addFood    = (f) => {
+    const novo = { id: "c" + uid(), custom: true, g: f.g || "Meus Alimentos", ...f };
+    setData((d) => ({ ...d, foods: [novo, ...(d.foods || [])] }));
+    db.insertFood(user.id, novo);
+  };
+  const updateFood = (id, patch) => {
+    setData((d) => ({ ...d, foods: (d.foods || []).map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
+    const updated = (data.foods || []).find(x => x.id === id);
+    if (updated) db.updateFood(user.id, { ...updated, ...patch });
+  };
+  const delFood    = (id) => {
+    setData((d) => ({ ...d, foods: (d.foods || []).filter((x) => x.id !== id) }));
+    db.deleteFood(user.id, id);
+  };
   const allFoods = foods;
+
+  /* ── Render guards ── */
+  if (authLoading) return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', fontFamily: 'sans-serif', color: '#5d6f66' }}>Carregando…</div>;
+  if (!user) return <Login />;
+  if (profile?.role === 'patient' && patientData) return <PatientPortal patientData={patientData} user={user} />;
+  if (profile?.role === 'patient' && !patientData) return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', fontFamily: 'sans-serif', color: '#5d6f66' }}>Carregando dados…</div>;
 
   return (
     <div className="np">
@@ -745,6 +841,10 @@ export default function App() {
               <button className={"navitem" + (view === "anamnese" ? " active" : "")} onClick={() => setView("anamnese")}><FileText size={18} /> Anamnese</button>
             </>
           )}
+          <div style={{ flex: 1 }} />
+          <button className="navitem" onClick={() => supabase.auth.signOut()} style={{ color: "#e5484d", marginTop: 8 }}>
+            <LogOut size={18} /> Sair
+          </button>
         </aside>
 
         <main className="main">
