@@ -602,6 +602,51 @@ const newDiet = (patient) => ({
   subs: {}, supplements: [],
 });
 
+/* ---------- NumInput: campo numérico que aceita vírgula e ponto ---------- */
+function NumInput({ value, onChange, className, ...props }) {
+  const [local, setLocal] = useState(value == null || value === "" ? "" : String(value));
+  const focused = useRef(false);
+
+  useEffect(() => {
+    if (!focused.current) setLocal(value == null || value === "" ? "" : String(value));
+  }, [value]);
+
+  const commit = (raw) => {
+    const normalized = raw.replace(",", ".");
+    const n = parseFloat(normalized);
+    if (!isNaN(n)) onChange(n);
+  };
+
+  return (
+    <input
+      {...props}
+      type="text"
+      inputMode="decimal"
+      className={className}
+      value={local}
+      onFocus={() => { focused.current = true; }}
+      onChange={(e) => {
+        const raw = e.target.value;
+        if (/^-?\d*[,.]?\d*$/.test(raw)) {
+          setLocal(raw);
+          commit(raw);
+        }
+      }}
+      onBlur={() => {
+        focused.current = false;
+        const normalized = local.replace(",", ".");
+        const n = parseFloat(normalized);
+        if (!isNaN(n)) {
+          onChange(n);
+          setLocal(String(n));
+        } else {
+          setLocal(value == null || value === "" ? "" : String(value));
+        }
+      }}
+    />
+  );
+}
+
 /* ============================================================ */
 export default function App() {
   const seedFoods = () => FOODS.map((f) => ({ ...f, m: f.m ? f.m.map((x) => [...x]) : undefined, mc: { ...(f.mc || {}) } }));
@@ -893,9 +938,9 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
           <div className={"sexbtn" + (diet.sex === "F" ? " on" : "")} onClick={() => up("sex", "F")}><span className="emo">👩</span>Feminino</div>
         </div>
         <div className="three">
-          <div><label className="lbl">Peso (kg)</label><input type="number" className="field" value={diet.weight} onChange={(e) => up("weight", +e.target.value)} /></div>
-          <div><label className="lbl">Altura (cm)</label><input type="number" className="field" value={diet.height} onChange={(e) => up("height", +e.target.value)} /></div>
-          <div><label className="lbl">Idade</label><input type="number" className="field" value={diet.age} onChange={(e) => up("age", +e.target.value)} /></div>
+          <div><label className="lbl">Peso (kg)</label><NumInput className="field" value={diet.weight} onChange={(v) => up("weight", v)} /></div>
+          <div><label className="lbl">Altura (cm)</label><NumInput className="field" value={diet.height} onChange={(v) => up("height", v)} /></div>
+          <div><label className="lbl">Idade</label><NumInput className="field" value={diet.age} onChange={(v) => up("age", v)} /></div>
         </div>
         <div className="two">
           <div><label className="lbl">Fórmula de TMB/GET</label><select className="field" value={diet.formula} onChange={(e) => up("formula", e.target.value)}>{Object.entries(FORMULAS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
@@ -904,7 +949,7 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
         <div className="two">
           <div><label className="lbl">Objetivo</label><select className="field" value={diet.objective} onChange={(e) => up("objective", e.target.value)}><option value="manutencao">Manutenção</option><option value="emagrecimento">Emagrecimento (déficit)</option><option value="hipertrofia">Hipertrofia (superávit)</option></select></div>
           {diet.objective !== "manutencao" && <div><label className="lbl">{diet.objective === "emagrecimento" ? "Déficit (kcal)" : "Superávit (kcal)"}</label><select className="field" value={diet.adjust} onChange={(e) => up("adjust", +e.target.value)}>{[300, 500, 600, 750, 1000].map((n) => <option key={n} value={n}>{n} kcal</option>)}</select></div>}
-          {FORMULAS[diet.formula].needsBf && <div><label className="lbl">% Gordura corporal</label><input type="number" className="field" value={diet.bf} onChange={(e) => up("bf", +e.target.value)} /></div>}
+          {FORMULAS[diet.formula].needsBf && <div><label className="lbl">% Gordura corporal</label><NumInput className="field" value={diet.bf} onChange={(v) => up("bf", v)} /></div>}
         </div>
       </div>
 
@@ -1128,12 +1173,12 @@ function FoodModal({ meal, foods, onClose, onAdd }) {
               {mode === "caseira" && (
                 <div className="two" style={{ marginTop: 4 }}>
                   <div><label className="lbl">Medida</label><select className="field" value={measureIdx} onChange={(e) => setMeasureIdx(+e.target.value)}>{sel.m.map((me, i) => <option key={i} value={i}>{me[0]} ({me[1]}g)</option>)}</select></div>
-                  <div><label className="lbl">Quantidade</label><input type="number" className="field" value={qty} min="0.5" step="0.5" onChange={(e) => setQty(+e.target.value)} /></div>
+                  <div><label className="lbl">Quantidade</label><NumInput className="field" value={qty} onChange={(v) => setQty(v)} /></div>
                 </div>
               )}
             </>}
             <label className="radio"><input type="radio" checked={mode === "gramas"} onChange={() => setMode("gramas")} /> Quantidade em gramas/ml</label>
-            {mode === "gramas" && <input type="number" className="field" value={grams} onChange={(e) => setGrams(+e.target.value)} placeholder="gramas" />}
+            {mode === "gramas" && <NumInput className="field" value={grams} onChange={(v) => setGrams(v)} placeholder="gramas" />}
             <div className="foot"><button className="btn ghost" onClick={() => setSel(null)}>Voltar</button><button className="btn" onClick={confirm}>Adicionar</button></div>
           </>
         )}
@@ -1192,7 +1237,7 @@ function NumGrid({ keys, labels, values, onChange, cols = 3, unit = "cm" }) {
       {keys.map((k) => (
         <div key={k}>
           <label className="lbl">{labels[k]} ({unit})</label>
-          <input type="number" className="field" value={values[k] ?? ""} onChange={(e) => onChange(k, e.target.value)} placeholder="0" />
+          <NumInput className="field" value={values[k] ?? ""} onChange={(v) => onChange(k, v)} placeholder="0" />
         </div>
       ))}
     </div>
@@ -1225,11 +1270,11 @@ function AssessmentWizard({ patient, onSave }) {
             <p className="ph">Informações gerais do paciente</p>
             <div className="two">
               <div><label className="lbl">Data da Avaliação</label><input type="date" className="field" value={a.date} onChange={(e) => up("date", e.target.value)} /></div>
-              <div><label className="lbl">Idade (anos)</label><input type="number" className="field" value={a.age} onChange={(e) => up("age", +e.target.value)} /></div>
+              <div><label className="lbl">Idade (anos)</label><NumInput className="field" value={a.age} onChange={(v) => up("age", v)} /></div>
             </div>
             <div className="two">
-              <div><label className="lbl">Peso (kg)</label><input type="number" className="field" value={a.weight} onChange={(e) => up("weight", +e.target.value)} /></div>
-              <div><label className="lbl">Altura (cm)</label><input type="number" className="field" value={a.height} onChange={(e) => up("height", +e.target.value)} /></div>
+              <div><label className="lbl">Peso (kg)</label><NumInput className="field" value={a.weight} onChange={(v) => up("weight", v)} /></div>
+              <div><label className="lbl">Altura (cm)</label><NumInput className="field" value={a.height} onChange={(v) => up("height", v)} /></div>
             </div>
             <div className="two">
               <div><label className="lbl">Sexo</label><select className="field" value={a.sex} onChange={(e) => up("sex", e.target.value)}><option value="M">Masculino</option><option value="F">Feminino</option></select></div>
@@ -1300,9 +1345,9 @@ function AssessmentWizard({ patient, onSave }) {
             <h2><Scale size={18} style={{ verticalAlign: "-3px" }} /> Resultados da Bioimpedância</h2>
             <p className="ph">Transcreva os valores do exame.</p>
             <div className="three">
-              <div><label className="lbl">% Gordura</label><input type="number" className="field" value={a.bioFat} onChange={(e) => up("bioFat", e.target.value)} /></div>
-              <div><label className="lbl">Massa muscular (kg)</label><input type="number" className="field" value={a.bioMuscle} onChange={(e) => up("bioMuscle", e.target.value)} /></div>
-              <div><label className="lbl">Água corporal (%)</label><input type="number" className="field" value={a.bioWater} onChange={(e) => up("bioWater", e.target.value)} /></div>
+              <div><label className="lbl">% Gordura</label><NumInput className="field" value={a.bioFat} onChange={(v) => up("bioFat", v)} /></div>
+              <div><label className="lbl">Massa muscular (kg)</label><NumInput className="field" value={a.bioMuscle} onChange={(v) => up("bioMuscle", v)} /></div>
+              <div><label className="lbl">Água corporal (%)</label><NumInput className="field" value={a.bioWater} onChange={(v) => up("bioWater", v)} /></div>
             </div>
           </>
         )}
@@ -1324,7 +1369,7 @@ function AssessmentWizard({ patient, onSave }) {
               ))}
             </div>
             <div className="infobox">A estimativa automática por IA precisa de um servidor com modelo de visão (próxima etapa). Por enquanto, informe abaixo o % de gordura estimado para registrar a avaliação.</div>
-            <div style={{ maxWidth: 220 }}><label className="lbl">% Gordura estimado</label><input type="number" className="field" value={a.iaFat} onChange={(e) => up("iaFat", e.target.value)} /></div>
+            <div style={{ maxWidth: 220 }}><label className="lbl">% Gordura estimado</label><NumInput className="field" value={a.iaFat} onChange={(v) => up("iaFat", v)} /></div>
           </>
         )}
 
@@ -1467,18 +1512,18 @@ function MyFoodsView({ foods, onAdd, onUpdate, onDel }) {
         <p className="ph">Valores <b>por 100 g</b>. Medida caseira e micronutrientes são opcionais.</p>
         <div className="row" style={{ marginBottom: 14 }}><label className="lbl">Nome do alimento *</label><input className="field" value={f.n} onChange={(e) => up("n", e.target.value)} placeholder="Ex.: Torrada integral da marca X" /></div>
         <div className="ingrid">
-          <div><label className="lbl">Calorias (kcal)</label><input type="number" className="field" value={f.kcal} onChange={(e) => up("kcal", e.target.value)} placeholder="por 100g" /></div>
-          <div><label className="lbl">Proteína (g)</label><input type="number" className="field" value={f.p} onChange={(e) => up("p", e.target.value)} placeholder="por 100g" /></div>
-          <div><label className="lbl">Carboidrato (g)</label><input type="number" className="field" value={f.c} onChange={(e) => up("c", e.target.value)} placeholder="por 100g" /></div>
+          <div><label className="lbl">Calorias (kcal)</label><NumInput className="field" value={f.kcal} onChange={(v) => up("kcal", v)} placeholder="por 100g" /></div>
+          <div><label className="lbl">Proteína (g)</label><NumInput className="field" value={f.p} onChange={(v) => up("p", v)} placeholder="por 100g" /></div>
+          <div><label className="lbl">Carboidrato (g)</label><NumInput className="field" value={f.c} onChange={(v) => up("c", v)} placeholder="por 100g" /></div>
         </div>
         <div className="ingrid" style={{ marginTop: 14 }}>
-          <div><label className="lbl">Gordura (g)</label><input type="number" className="field" value={f.f} onChange={(e) => up("f", e.target.value)} placeholder="por 100g" /></div>
-          <div><label className="lbl">Fibra (g)</label><input type="number" className="field" value={f.fib} onChange={(e) => up("fib", e.target.value)} placeholder="por 100g" /></div>
+          <div><label className="lbl">Gordura (g)</label><NumInput className="field" value={f.f} onChange={(v) => up("f", v)} placeholder="por 100g" /></div>
+          <div><label className="lbl">Fibra (g)</label><NumInput className="field" value={f.fib} onChange={(v) => up("fib", v)} placeholder="por 100g" /></div>
           <div></div>
         </div>
         <div className="ingrid" style={{ marginTop: 14 }}>
           <div><label className="lbl">Medida caseira (opcional)</label><input className="field" value={f.measLabel} onChange={(e) => up("measLabel", e.target.value)} placeholder="Ex.: 1 fatia" /></div>
-          <div><label className="lbl">Peso da medida (g)</label><input type="number" className="field" value={f.measGrams} onChange={(e) => up("measGrams", e.target.value)} placeholder="Ex.: 25" /></div>
+          <div><label className="lbl">Peso da medida (g)</label><NumInput className="field" value={f.measGrams} onChange={(v) => up("measGrams", v)} placeholder="Ex.: 25" /></div>
           <div></div>
         </div>
 
@@ -1488,7 +1533,7 @@ function MyFoodsView({ foods, onAdd, onUpdate, onDel }) {
         {showMicros && (
           <div className="ingrid" style={{ marginTop: 12 }}>
             {MICRO_FIELDS.map(([k, lbl]) => (
-              <div key={k}><label className="lbl">{lbl}</label><input type="number" className="field" value={f.micros[k] ?? ""} onChange={(e) => upMicro(k, e.target.value)} placeholder="por 100g" /></div>
+              <div key={k}><label className="lbl">{lbl}</label><NumInput className="field" value={f.micros[k] ?? ""} onChange={(v) => upMicro(k, v)} placeholder="por 100g" /></div>
             ))}
           </div>
         )}
@@ -1575,7 +1620,7 @@ function ExamsView({ patient, exams, onSave, onDel, onPickPatient }) {
           </div>
           <div>
             <label className="lbl">Resultado {unit ? `(${unit})` : ""}</label>
-            <input type="number" className="field" value={result} onChange={(e) => setResult(e.target.value)} placeholder="valor" />
+            <NumInput className="field" value={result} onChange={(v) => setResult(v)} placeholder="valor" />
           </div>
         </div>
         {cat && (
@@ -1617,7 +1662,7 @@ function ExamsView({ patient, exams, onSave, onDel, onPickPatient }) {
 
 function AnamneseField({ q, value, onChange }) {
   if (q.type === "textarea") return <textarea className="field" rows={2} value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder="Resposta…" />;
-  if (q.type === "number") return <input type="number" className="field" value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder="Resposta…" />;
+  if (q.type === "number") return <NumInput className="field" value={value || ""} onChange={(v) => onChange(v)} placeholder="Resposta…" />;
   if (q.type === "select") return <select className="field" value={value || ""} onChange={(e) => onChange(e.target.value)}><option value="">Selecione…</option>{(q.options || []).map((o) => <option key={o}>{o}</option>)}</select>;
   if (q.type === "radio") return <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>{(q.options || []).map((o) => <label key={o} className="radio" style={{ padding: "4px 0" }}><input type="radio" name={q.id} checked={value === o} onChange={() => onChange(o)} /> {o}</label>)}</div>;
   return <input className="field" value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder="Resposta…" />;
