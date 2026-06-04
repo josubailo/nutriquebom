@@ -4,7 +4,7 @@ import {
   Plus, Search, X, Copy, ChevronDown, ChevronUp, Pencil, Trash2,
   ArrowLeft, FileDown, Save, ClipboardList, Pill, Repeat, Mail, Phone, Cake,
   Camera, Ruler, Scale, TrendingUp, Percent, ImageIcon, Apple, FileText, LogOut,
-  Video, HelpCircle, Send, Lock
+  Video, HelpCircle, Send, Lock, Clock
 } from "lucide-react";
 import { supabase, supabaseAdmin } from "./supabase";
 import * as db from "./db";
@@ -755,13 +755,14 @@ export default function App() {
   };
 
   const saveDiet = (pid, diet) => {
+    const withTs = { ...diet, updatedAt: Date.now() };
     setData((d) => {
       const list   = d.diets[pid] || [];
-      const exists = list.some((x) => x.id === diet.id);
-      const upd    = exists ? list.map((x) => (x.id === diet.id ? diet : x)) : [diet, ...list];
+      const exists = list.some((x) => x.id === withTs.id);
+      const upd    = exists ? list.map((x) => (x.id === withTs.id ? withTs : x)) : [withTs, ...list];
       return { ...d, diets: { ...d.diets, [pid]: upd } };
     });
-    db.upsertDiet(user.id, pid, diet);
+    db.upsertDiet(user.id, pid, withTs);
   };
 
   const delDiet = (pid, did) => {
@@ -886,7 +887,8 @@ export default function App() {
           {activePatient && (
             <>
               <div className="navlabel">Paciente Atual</div>
-              <div style={{ padding: "0 11px 6px", fontWeight: 600 }}>{activePatient.name}</div>
+              <div style={{ padding: "0 11px 6px", fontWeight: 600, fontSize: 13 }}>{activePatient.name}</div>
+              <button className={"navitem" + (view === "portal" ? " active" : "")} onClick={() => setView("portal")} style={{ color: 'var(--green-d)', fontWeight: 600 }}><UserCircle size={18} /> Portal do Paciente</button>
               <button className={"navitem" + (view === "builder" ? " active" : "")} onClick={() => openNewDiet(activePatient)}><Utensils size={18} /> Nova Dieta</button>
               <button className={"navitem" + (view === "history" ? " active" : "")} onClick={() => setView("history")}><ClipboardList size={18} /> Histórico de Dietas</button>
               <button className={"navitem" + (view === "assessment" ? " active" : "")} onClick={() => setView("assessment")}><Activity size={18} /> Avaliação Física</button>
@@ -910,11 +912,15 @@ export default function App() {
             view === "exams" ? <ExamsView patient={activePatient} exams={examsOf(activePatient?.id)} onSave={(e) => saveExam(activePatient.id, e)} onDel={(eid) => delExam(activePatient.id, eid)} onPickPatient={() => setView("patients")} /> :
             view === "anamnese" ? <AnamneseView key={activePatient?.id} patient={activePatient} template={data.anamneseTemplate || DEFAULT_ANAMNESE} answers={anamneseOf(activePatient?.id)} onSaveAnswers={(a) => saveAnamnese(activePatient.id, a)} onSaveTemplate={saveTemplate} onPickPatient={() => setView("patients")} /> :
             view === "profile" ? <ProfileView profile={data.profile || {}} onSave={saveProfile} /> :
-            view === "history" ? <HistoryView patient={activePatient} diets={dietsOf(activePatient?.id)} onOpen={(d) => openDiet(activePatient, d)} onNew={() => openNewDiet(activePatient)} onDel={(did) => delDiet(activePatient.id, did)} onDuplicate={(d) => { const copy = { ...JSON.parse(JSON.stringify(d)), id: uid(), name: d.name + " (cópia)", createdAt: Date.now() }; saveDiet(activePatient.id, copy); }} onRename={(did, name) => { const diet = dietsOf(activePatient.id).find(x => x.id === did); if (diet) saveDiet(activePatient.id, { ...diet, name }); }} /> :
+            view === "history" ? <HistoryView patient={activePatient} diets={dietsOf(activePatient?.id)} onOpen={(d) => openDiet(activePatient, d)} onNew={() => openNewDiet(activePatient)} onDel={(did) => delDiet(activePatient.id, did)} onDuplicate={(d) => { const copy = { ...JSON.parse(JSON.stringify(d)), id: uid(), name: d.name + " (cópia)", createdAt: Date.now(), active: false }; saveDiet(activePatient.id, copy); }} onRename={(did, name) => { const diet = dietsOf(activePatient.id).find(x => x.id === did); if (diet) saveDiet(activePatient.id, { ...diet, name }); }} onSetActive={(did) => { dietsOf(activePatient.id).forEach(d => saveDiet(activePatient.id, { ...d, active: d.id === did })); }} /> :
             view === "builder" ? <Builder patient={activePatient} diet={activeDiet} setDiet={setActiveDiet} foods={allFoods} profile={data.profile || {}} onSave={() => { saveDiet(activePatient.id, activeDiet); setView("history"); }} onBack={() => setView("history")} /> :
             null}
         </main>
       </div>
+      {/* PrintView fica fora do .layout para evitar páginas em branco no PDF */}
+      {view === "builder" && activeDiet && activePatient && (
+        <PrintView diet={activeDiet} patient={activePatient} profile={data.profile || {}} />
+      )}
     </div>
   );
 }
@@ -1021,7 +1027,7 @@ function PatientModal({ onClose, onSave }) {
 }
 
 /* ---------- Histórico (base da periodização) ---------- */
-function HistoryView({ patient, diets, onOpen, onNew, onDel, onDuplicate, onRename }) {
+function HistoryView({ patient, diets, onOpen, onNew, onDel, onDuplicate, onRename, onSetActive }) {
   const [renamingId, setRenamingId] = useState(null);
   const [renameVal, setRenameVal]   = useState("");
 
@@ -1033,44 +1039,70 @@ function HistoryView({ patient, diets, onOpen, onNew, onDel, onDuplicate, onRena
     setRenamingId(null);
   };
 
+  // Determina qual dieta está publicada para o paciente
+  const hasExplicitActive = diets.some(d => d.active === true);
+  const activeDietId = hasExplicitActive
+    ? diets.find(d => d.active === true)?.id
+    : (diets.length > 0 ? [...diets].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0]?.id : null);
+
+  const fmtTs = (ts) => {
+    if (!ts) return null;
+    return new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
+
   return (
     <>
       <div className="topbar"><h1 className="title" style={{ flex: 1 }}>Dietas — <span>{patient.name}</span></h1><button className="btn" onClick={onNew}><Plus size={17} /> Nova Dieta</button></div>
-      <p className="sub" style={{ marginTop: -14, marginBottom: 18 }}>Cada plano fica salvo aqui. Para periodizar, duplique um plano e ajuste calorias/macros para a próxima fase.</p>
+      <p className="sub" style={{ marginTop: -14, marginBottom: 18 }}>Duplique um plano para periodizar e use "Publicar para paciente" para definir qual dieta ele verá no portal.</p>
       {diets.length === 0 ? <div className="empty"><ClipboardList size={40} style={{ opacity: .4 }} /><p>Nenhuma dieta montada ainda.</p></div> :
-        diets.map((d, idx) => {
+        diets.map((d) => {
           const tgt = computeTargets(d);
           const isRenaming = renamingId === d.id;
+          const isActive = d.id === activeDietId;
           return (
-            <div className="panel" key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: 18, flexWrap: "wrap" }}>
+            <div className="panel" key={d.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: 18, flexWrap: "wrap", border: isActive ? '2px solid var(--green)' : undefined }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 {isRenaming ? (
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <input
-                      className="field"
-                      value={renameVal}
-                      autoFocus
+                    <input className="field" value={renameVal} autoFocus
                       onChange={e => setRenameVal(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter") confirmRename(d); if (e.key === "Escape") setRenamingId(null); }}
-                      style={{ maxWidth: 280 }}
-                    />
+                      style={{ maxWidth: 280 }} />
                     <button className="btn sm" onClick={() => confirmRename(d)}><Save size={14} /></button>
                     <button className="btn sm ghost" onClick={() => setRenamingId(null)}>Cancelar</button>
                   </div>
                 ) : (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <div style={{ fontWeight: 700, fontSize: 16 }}>{d.name}</div>
-                    {idx === 0 && <span style={{ fontSize: 11, background: 'var(--green-soft)', color: 'var(--green-d)', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>Atual</span>}
+                    {isActive && <span style={{ fontSize: 11, background: 'var(--green)', color: '#fff', padding: '2px 10px', borderRadius: 999, fontWeight: 700 }}>📢 Publicada</span>}
                     <button className="iconbtn" title="Renomear" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-soft)", padding: 3 }} onClick={() => startRename(d)}><Pencil size={13} /></button>
                   </div>
                 )}
-                {!isRenaming && <div className="sub" style={{ fontSize: 13 }}>{new Date(d.createdAt).toLocaleDateString("pt-BR")} · {r0(tgt.kcal)} kcal · {r0(tgt.p)}g P / {r0(tgt.c)}g C / {r0(tgt.f)}g G</div>}
+                {!isRenaming && (
+                  <div className="sub" style={{ fontSize: 12.5, marginTop: 4 }}>
+                    {r0(tgt.kcal)} kcal · {r0(tgt.p)}g P / {r0(tgt.c)}g C / {r0(tgt.f)}g G
+                    <br />
+                    <span style={{ color: 'var(--ink-soft)' }}>
+                      Criada: {new Date(d.createdAt).toLocaleDateString("pt-BR")}
+                      {d.updatedAt && d.updatedAt !== d.createdAt && (
+                        <span> · Modificada: {fmtTs(d.updatedAt)}</span>
+                      )}
+                    </span>
+                  </div>
+                )}
               </div>
-              {!isRenaming && <>
-                <button className="btn sm ghost" onClick={() => onOpen(d)}><Pencil size={15} /> Abrir</button>
-                <button className="btn sm ghost" onClick={() => onDuplicate(d)}><Copy size={15} /> Duplicar</button>
-                <button className="btn sm danger" onClick={() => onDel(d.id)}><Trash2 size={15} /></button>
-              </>}
+              {!isRenaming && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  {!isActive && (
+                    <button className="btn sm" style={{ background: 'var(--green-soft)', color: 'var(--green-d)', border: '1px solid #cde8d8' }} title="Publicar esta dieta para o paciente" onClick={() => onSetActive(d.id)}>
+                      📢 Publicar para paciente
+                    </button>
+                  )}
+                  <button className="btn sm ghost" onClick={() => onOpen(d)}><Pencil size={15} /> Abrir</button>
+                  <button className="btn sm ghost" onClick={() => onDuplicate(d)}><Copy size={15} /> Duplicar</button>
+                  <button className="btn sm danger" onClick={() => onDel(d.id)}><Trash2 size={15} /></button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -1088,15 +1120,23 @@ function AgendaView({ patients }) {
   const proximas = withAppt.filter(p => (p.nextAppointment || '') >= hoje);
   const passadas  = withAppt.filter(p => (p.nextAppointment || '') < hoje);
 
+  const fmtApptDate = (raw) => {
+    if (!raw) return '—';
+    const dt = new Date(raw.includes('T') ? raw : raw + 'T12:00');
+    const dateStr = dt.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+    const timeStr = raw.includes('T') && raw.length > 10 ? ` · ${raw.slice(11, 16)}` : '';
+    return dateStr + timeStr;
+  };
+
   const renderRow = (p) => (
-    <div key={p.id} className="item">
-      <div className="avatar" style={{ width: 34, height: 34, flexShrink: 0 }}><UserCircle size={18} /></div>
+    <div key={p.id} className="item" style={{ padding: '12px 4px' }}>
+      <div className="avatar" style={{ width: 38, height: 38, flexShrink: 0 }}><UserCircle size={20} /></div>
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 600 }}>{p.name}</div>
         {p.phone && <div className="iqt">{p.phone}</div>}
       </div>
-      <div className="imac" style={{ fontWeight: 700, color: 'var(--green-d)' }}>
-        {new Date(p.nextAppointment + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+      <div style={{ textAlign: 'right' }}>
+        <div style={{ fontWeight: 700, color: 'var(--green-d)', fontSize: 13 }}>{fmtApptDate(p.nextAppointment)}</div>
       </div>
     </div>
   );
@@ -1135,9 +1175,31 @@ function computeTargets(d) {
   return { tmb, get, vet, kcal: vet, p: pG, c: cG, f: fG, pK, fK, cK, cPerKg: cG / d.weight };
 }
 
+/* ---------- Modal de confirmação de salvar dieta ---------- */
+function SaveDietModal({ onSave, onClose }) {
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 400, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 44, marginBottom: 8 }}>💾</div>
+        <h3 style={{ justifyContent: 'center', fontSize: 20, marginBottom: 8 }}>Salvar dieta?</h3>
+        <p style={{ color: 'var(--ink-soft)', fontSize: 14, marginBottom: 22 }}>A dieta será salva no histórico do paciente.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button className="btn" style={{ justifyContent: 'center' }} onClick={onSave}>
+            <Save size={16} /> Salvar e voltar ao histórico
+          </button>
+          <button className="btn ghost" style={{ justifyContent: 'center' }} onClick={onClose}>
+            Continuar editando
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Builder ---------- */
 function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
   const [foodModal, setFoodModal] = useState(null); // {mealId}
+  const [saveModal, setSaveModal] = useState(false);
   const tgt = useMemo(() => computeTargets(diet), [diet]);
   const dayTotals = useMemo(() => sumMacros(diet.meals.flatMap((m) => m.items)), [diet]);
   const microTotals = useMemo(() => sumMicros(diet.meals.flatMap((m) => m.items)), [diet]);
@@ -1160,7 +1222,7 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
         <button className="btn sm ghost" onClick={onBack}><ArrowLeft size={16} /> Voltar</button>
         <div className="ttl">Dieta — {patient?.name}</div>
         <button className="btn sm ghost" onClick={() => window.print()}><FileDown size={16} /> Gerar PDF</button>
-        <button className="btn sm" onClick={onSave}><Save size={16} /> Salvar</button>
+        <button className="btn sm" onClick={() => setSaveModal(true)}><Save size={16} /> Salvar</button>
       </div>
 
       <div style={{ textAlign: "center", marginBottom: 18 }}>
@@ -1340,8 +1402,14 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
 
       {foodModal && <FoodModal meal={diet.meals.find((m) => m.id === foodModal.mealId)} foods={foods} onClose={() => setFoodModal(null)} onAdd={(item) => { setDiet((d) => ({ ...d, meals: d.meals.map((m) => m.id === foodModal.mealId ? { ...m, items: [...m.items, item] } : m) })); setFoodModal(null); }} />}
 
-      {/* PDF / impressão */}
-      <PrintView diet={diet} patient={patient} profile={profile} />
+      {/* Botão salvar fixo no final */}
+      <div style={{ position: 'sticky', bottom: 24, display: 'flex', justifyContent: 'flex-end', marginTop: 8, marginBottom: 24, pointerEvents: 'none' }}>
+        <button className="btn" style={{ pointerEvents: 'all', boxShadow: '0 4px 20px rgba(31,157,99,.4)', padding: '13px 24px', fontSize: 15 }} onClick={() => setSaveModal(true)}>
+          <Save size={18} /> Salvar Dieta
+        </button>
+      </div>
+
+      {saveModal && <SaveDietModal onSave={() => { setSaveModal(false); onSave(); }} onClose={() => setSaveModal(false)} />}
     </>
   );
 }
@@ -1359,11 +1427,23 @@ function SupplementAdder({ onAdd }) {
 }
 
 function SubAdder({ onAdd }) {
-  const [v, setV] = useState("");
+  const [name, setName] = useState("");
+  const [qty,  setQty]  = useState("");
+
+  const add = () => {
+    if (!name.trim()) return;
+    const text = qty.trim() ? `${name.trim()} — ${qty.trim()}` : name.trim();
+    onAdd(text);
+    setName(""); setQty("");
+  };
+
   return (
-    <div style={{ display: "flex", gap: 8, marginTop: 6, maxWidth: 460 }}>
-      <input className="field" placeholder="Buscar / digitar substituto…" value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && v.trim()) { onAdd(v.trim()); setV(""); } }} />
-      <button className="btn sm" onClick={() => { if (v.trim()) { onAdd(v.trim()); setV(""); } }}>Salvar</button>
+    <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap", maxWidth: 560 }}>
+      <input className="field" style={{ flex: 2, minWidth: 150 }} placeholder="Alimento substituto…" value={name}
+        onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") add(); }} />
+      <input className="field" style={{ flex: 1, minWidth: 110 }} placeholder="Quantidade (ex: 130g)" value={qty}
+        onChange={e => setQty(e.target.value)} onKeyDown={e => { if (e.key === "Enter") add(); }} />
+      <button className="btn sm" onClick={add}><Plus size={14} /> Adicionar</button>
     </div>
   );
 }
@@ -2108,7 +2188,13 @@ function ProfileView({ profile, onSave }) {
 /* ── Portal do Paciente — visão do admin ──────────────────── */
 function PatientPortalAdmin({ patient, nutritionistId, onSaveAppt, onBack }) {
   const [tab, setTab]           = useState('appointment')
-  const [appt, setAppt]         = useState(patient?.nextAppointment || '')
+
+  // Parse appt value → date + time
+  const rawAppt = patient?.nextAppointment || '';
+  const [apptDate, setApptDate] = useState(() => rawAppt.includes('T') ? rawAppt.slice(0, 10) : rawAppt)
+  const [apptTime, setApptTime] = useState(() => rawAppt.includes('T') ? rawAppt.slice(11, 16) : '')
+  const [apptSaved, setApptSaved] = useState(false)
+
   const [messages, setMessages] = useState(null)
   const [photos, setPhotos]     = useState(null)
   const [videoReqs, setVideoReqs] = useState(null)
@@ -2153,14 +2239,52 @@ function PatientPortalAdmin({ patient, nutritionistId, onSaveAppt, onBack }) {
       </div>
 
       {tab === 'appointment' && (
-        <div className="panel" style={{ maxWidth: 480 }}>
-          <h2 style={{ marginBottom: 16 }}>Definir próxima consulta</h2>
-          <p className="ph">Esta data aparecerá no portal do paciente.</p>
-          <label className="lbl"><CalendarDays size={14} /> Data da próxima consulta</label>
-          <input type="date" className="field" value={appt} onChange={e => setAppt(e.target.value)} style={{ marginBottom: 14 }} />
-          <button className="btn" onClick={() => { onSaveAppt(appt); }}>
-            <Save size={16} /> Salvar data
+        <div className="panel" style={{ maxWidth: 520 }}>
+          <h2 style={{ marginBottom: 4 }}>📅 Próxima Consulta</h2>
+          <p className="ph">A data e horário aparecerão no portal do paciente e na Minha Agenda.</p>
+
+          <div className="two" style={{ marginTop: 16 }}>
+            <div>
+              <label className="lbl"><CalendarDays size={14} /> Data da consulta</label>
+              <input type="date" className="field" value={apptDate} onChange={e => { setApptDate(e.target.value); setApptSaved(false); }} />
+            </div>
+            <div>
+              <label className="lbl"><Clock size={14} /> Horário</label>
+              <input type="time" className="field" value={apptTime} onChange={e => { setApptTime(e.target.value); setApptSaved(false); }} />
+            </div>
+          </div>
+
+          <button className="btn" onClick={() => {
+            const combined = apptDate ? (apptTime ? `${apptDate}T${apptTime}` : apptDate) : '';
+            onSaveAppt(combined);
+            setApptSaved(true);
+          }}>
+            <Save size={16} /> Salvar consulta
           </button>
+
+          {apptSaved && apptDate && (
+            <div className="infobox" style={{ background: 'var(--green-soft)', border: '1px solid #cde8d8', color: 'var(--green-d)', marginTop: 16 }}>
+              ✅ Consulta salva com sucesso!
+              <div style={{ fontWeight: 700, marginTop: 6, fontSize: 15 }}>
+                {new Date((apptDate + (apptTime ? 'T' + apptTime : 'T12:00')).replace(/T/, 'T')).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+                {apptTime && ` às ${apptTime}`}
+              </div>
+              <div style={{ fontSize: 12.5, marginTop: 4, color: 'var(--green-d)' }}>
+                O paciente já pode ver essa data no portal dele.
+              </div>
+            </div>
+          )}
+
+          {!apptSaved && (apptDate || rawAppt) && (
+            <div style={{ marginTop: 16, padding: '12px 16px', background: 'var(--bg)', borderRadius: 12, fontSize: 13, color: 'var(--ink-soft)' }}>
+              {rawAppt ? (
+                <>Última consulta salva: <b style={{ color: 'var(--ink)' }}>
+                  {new Date((rawAppt.includes('T') ? rawAppt : rawAppt + 'T12:00')).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  {rawAppt.includes('T') && rawAppt.length > 10 ? ` às ${rawAppt.slice(11, 16)}` : ''}
+                </b></>
+              ) : 'Nenhuma consulta salva ainda.'}
+            </div>
+          )}
         </div>
       )}
 
@@ -2242,27 +2366,63 @@ function PatientPortalAdmin({ patient, nutritionistId, onSaveAppt, onBack }) {
 
 function PrintView({ diet, patient, profile }) {
   const pr = profile || {};
+
+  // Mapeia foodId → nome para as substituições
+  const foodNames = {};
+  (diet.meals || []).forEach(m => m.items.forEach(it => { foodNames[it.foodId || it.id] = it.name || it.foodId; }));
+
+  const subsEntries = Object.entries(diet.subs || {}).filter(([, subs]) => subs && subs.length > 0);
+
   return (
     <div className="np-print">
-      {(pr.name || pr.clinic) && <div style={{ textAlign: "center", marginBottom: 4 }}><b style={{ fontSize: 16 }}>{pr.clinic || pr.name}</b>{pr.name && pr.clinic ? <span> · {pr.name}</span> : null}{pr.crn ? <span> · {pr.crn}</span> : null}</div>}
+      {(pr.name || pr.clinic) && (
+        <div style={{ textAlign: "center", marginBottom: 4 }}>
+          <b style={{ fontSize: 16 }}>{pr.clinic || pr.name}</b>
+          {pr.name && pr.clinic ? <span> · {pr.name}</span> : null}
+          {pr.crn ? <span> · {pr.crn}</span> : null}
+        </div>
+      )}
       <h1>Plano Alimentar Personalizado</h1>
       <div style={{ display: "flex", justifyContent: "space-between", margin: "14px 0 4px" }}>
         <b>Paciente: {patient?.name}</b><span>Data: {new Date().toLocaleDateString("pt-BR")}</span>
       </div>
-      <hr />
+      <hr style={{ marginBottom: 10 }} />
+
       {diet.meals.filter((m) => m.items.length).map((m) => (
-        <div key={m.id}>
+        <div key={m.id} className="print-section">
           <div className="meal-title">{m.time} — {m.name}</div>
-          <table><thead><tr><th>Alimento</th><th>Porção</th></tr></thead>
+          <table>
+            <thead><tr><th style={{ width: '65%' }}>Alimento</th><th>Porção</th></tr></thead>
             <tbody>{m.items.map((it) => <tr key={it.id}><td>{it.name}</td><td>{it.label}</td></tr>)}</tbody>
           </table>
         </div>
       ))}
+
       {(diet.supplements || []).length > 0 && (
-        <>
-          <div className="meal-title">Suplementação</div>
-          <table><tbody>{diet.supplements.map((s, i) => <tr key={i}><td>{s.name}</td><td>{s.dose} — {s.time}</td></tr>)}</tbody></table>
-        </>
+        <div className="print-section">
+          <div className="meal-title">💊 Suplementação</div>
+          <table>
+            <thead><tr><th style={{ width: '50%' }}>Suplemento</th><th>Dose</th><th>Horário</th></tr></thead>
+            <tbody>{diet.supplements.map((s, i) => <tr key={i}><td>{s.name}</td><td>{s.dose}</td><td>{s.time}</td></tr>)}</tbody>
+          </table>
+        </div>
+      )}
+
+      {subsEntries.length > 0 && (
+        <div className="print-section">
+          <div className="meal-title">🔄 Substituições Permitidas</div>
+          <table>
+            <thead><tr><th style={{ width: '40%' }}>Alimento</th><th>Pode substituir por</th></tr></thead>
+            <tbody>
+              {subsEntries.map(([foodId, subs]) => (
+                <tr key={foodId}>
+                  <td style={{ fontWeight: 600 }}>{foodNames[foodId] || foodId}</td>
+                  <td>{subs.join(' / ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

@@ -134,9 +134,13 @@ export default function PatientPortal({ patientData }) {
 function PtDiets({ diets, patient }) {
   const [openId, setOpenId] = useState(null)
 
-  // Mostra somente a dieta mais recente para o paciente
+  // Mostra a dieta marcada como publicada (active: true),
+  // ou a mais recente se nenhuma foi explicitamente publicada
   const sorted = [...diets].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-  const current = sorted[0] || null
+  const hasExplicitActive = diets.some(d => d.active === true)
+  const current = hasExplicitActive
+    ? diets.find(d => d.active === true) || sorted[0]
+    : sorted[0] || null
   const visibleDiets = current ? [current] : []
 
   const active = visibleDiets.find(d => d.id === openId)
@@ -743,9 +747,6 @@ function PtExams({ exams, patient }) {
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
                   <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 20 }}>{last?.result} <small style={{ fontSize: 11, color: 'var(--ink-soft)' }}>{g.unit}</small></div>
-                  {last?.status && last.status !== '—' && (
-                    <span style={{ fontSize: 11.5, padding: '2px 8px', borderRadius: 999, fontWeight: 700, background: statusBg, color: statusColor }}>{last.status}</span>
-                  )}
                 </div>
                 {isOpen ? <ChevronUp size={18} style={{ color: 'var(--ink-soft)', flexShrink: 0 }} /> : <ChevronDown size={18} style={{ color: 'var(--ink-soft)', flexShrink: 0 }} />}
               </div>
@@ -779,14 +780,10 @@ function PtExams({ exams, patient }) {
                           <div style={{ fontWeight: 500 }}>
                             {e.date ? new Date(e.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                           </div>
-                          {g.ref && <div className="iqt">ref: {g.ref} {g.unit}</div>}
                         </div>
                         <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 17 }}>
                           {e.result} <small style={{ fontSize: 11, color: 'var(--ink-soft)' }}>{g.unit}</small>
                         </div>
-                        {e.status && e.status !== '—' && (
-                          <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, fontWeight: 700, background: eBg, color: eColor, whiteSpace: 'nowrap' }}>{e.status}</span>
-                        )}
                       </div>
                     )
                   })}
@@ -803,6 +800,13 @@ function PtExams({ exams, patient }) {
 /* ── Helpers ─────────────────────────────────────────────────── */
 function fmtDate(d) {
   if (!d) return '—'
-  const dt = new Date(d + 'T12:00:00')
-  return isNaN(dt) ? d : dt.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+  const hasTime = d.includes('T') && d.length > 10
+  const dt = hasTime ? new Date(d) : new Date(d + 'T12:00:00')
+  if (isNaN(dt)) return d
+  const dateStr = dt.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+  if (hasTime) {
+    const timeStr = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    return `${dateStr} às ${timeStr}`
+  }
+  return dateStr
 }
