@@ -68,6 +68,7 @@ export async function insertPatient(nutritionistId, patient) {
   await supabase.from('patients').insert({
     id:              patient.id,
     nutritionist_id: nutritionistId,
+    user_id:         patient.userId || null,
     name:            patient.name,
     email:           patient.email || null,
     phone:           patient.phone || null,
@@ -195,7 +196,6 @@ export async function upsertSettings(nutritionistId, { profile, anamneseTemplate
 
 // ── Portal do paciente ───────────────────────────────────────
 export async function loadPatientData(userId) {
-  // Encontra o registro do paciente vinculado a esse user_id
   const { data: patient } = await supabase
     .from('patients').select('*').eq('user_id', userId).maybeSingle()
 
@@ -206,33 +206,120 @@ export async function loadPatientData(userId) {
     { data: assessments },
     { data: exams },
     { data: anamneseRow },
+    { data: messages },
+    { data: videoRequests },
+    { data: photos },
   ] = await Promise.all([
     supabase.from('diets').select('*').eq('patient_id', patient.id),
     supabase.from('assessments').select('*').eq('patient_id', patient.id),
     supabase.from('exams').select('*').eq('patient_id', patient.id),
     supabase.from('anamnese').select('*').eq('patient_id', patient.id).maybeSingle(),
+    supabase.from('patient_messages').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
+    supabase.from('patient_video_requests').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
+    supabase.from('patient_photos').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
   ])
 
   return {
-    patient: rowToPatient(patient),
-    diets:       (diets || []).map(d => ({ ...d.data, id: d.id, name: d.name, createdAt: d.created_at })),
-    assessments: (assessments || []).map(a => ({ ...a.data, id: a.id })),
-    exams:       (exams || []).map(e => ({ ...e.data, id: e.id })),
-    anamnese:    anamneseRow?.answers || {},
+    patient:        rowToPatient(patient),
+    diets:          (diets || []).map(d => ({ ...d.data, id: d.id, name: d.name, createdAt: d.created_at })),
+    assessments:    (assessments || []).map(a => ({ ...a.data, id: a.id })),
+    exams:          (exams || []).map(e => ({ ...e.data, id: e.id })),
+    anamnese:       anamneseRow?.answers || {},
+    messages:       messages || [],
+    videoRequests:  videoRequests || [],
+    photos:         photos || [],
   }
+}
+
+// ── Mensagens do paciente ────────────────────────────────────
+export async function submitPatientMessage(patientId, nutritionistId, content) {
+  const { data, error } = await supabase.from('patient_messages').insert({
+    patient_id:      patientId,
+    nutritionist_id: nutritionistId,
+    content,
+  }).select().single()
+  return { data, error }
+}
+
+export async function replyToMessage(messageId, reply) {
+  await supabase.from('patient_messages').update({
+    reply,
+    replied_at: new Date().toISOString(),
+  }).eq('id', messageId)
+}
+
+export async function loadPatientMessages(nutritionistId) {
+  const { data } = await supabase.from('patient_messages')
+    .select('*').eq('nutritionist_id', nutritionistId).order('created_at', { ascending: false })
+  return data || []
+}
+
+// ── Solicitações de vídeo chamada ────────────────────────────
+export async function submitVideoRequest(patientId, nutritionistId, message, preferredDate) {
+  const { data, error } = await supabase.from('patient_video_requests').insert({
+    patient_id:      patientId,
+    nutritionist_id: nutritionistId,
+    message,
+    preferred_date:  preferredDate,
+    status:          'pending',
+  }).select().single()
+  return { data, error }
+}
+
+export async function updateVideoRequestStatus(requestId, status) {
+  await supabase.from('patient_video_requests').update({ status }).eq('id', requestId)
+}
+
+export async function loadVideoRequests(nutritionistId) {
+  const { data } = await supabase.from('patient_video_requests')
+    .select('*').eq('nutritionist_id', nutritionistId).order('created_at', { ascending: false })
+  return data || []
+}
+
+// ── Fotos dos pacientes ──────────────────────────────────────
+export async function uploadPatientPhoto(patientId, nutritionistId, file, caption) {
+  const path = `${patientId}/${Date.now()}_${file.name}`
+  const { error: upErr } = await supabase.storage.from('patient-photos').upload(path, file)
+  if (upErr) return { error: upErr }
+
+  const { data: { publicUrl } } = supabase.storage.from('patient-photos').getPublicUrl(path)
+
+  const { data, error } = await supabase.from('patient_photos').insert({
+    patient_id:      patientId,
+    nutritionist_id: nutritionistId,
+    storage_path:    path,
+    public_url:      publicUrl,
+    caption,
+  }).select().single()
+  return { data, error }
+}
+
+export async function loadPatientPhotos(nutritionistId, patientId) {
+  const q = supabase.from('patient_photos').select('*').eq('nutritionist_id', nutritionistId)
+  if (patientId) q.eq('patient_id', patientId)
+  const { data } = await q.order('created_at', { ascending: false })
+  return data || []
+}
+
+// ── Próxima consulta ─────────────────────────────────────────
+export async function setNextAppointment(nutritionistId, patientId, nextAppointment) {
+  await supabase.from('patients').update({ next_appointment: nextAppointment })
+    .eq('id', patientId).eq('nutritionist_id', nutritionistId)
 }
 
 // ── Helper interno ───────────────────────────────────────────
 function rowToPatient(p) {
   return {
-    id:        p.id,
-    name:      p.name,
-    email:     p.email,
-    phone:     p.phone,
-    birth:     p.birth,
-    sex:       p.sex,
-    notes:     p.notes,
-    createdAt: p.created_at,
-    userId:    p.user_id,
+    id:              p.id,
+    name:            p.name,
+    email:           p.email,
+    phone:           p.phone,
+    birth:           p.birth,
+    sex:             p.sex,
+    notes:           p.notes,
+    createdAt:       p.created_at,
+    userId:          p.user_id,
+    nutritionistId:  p.nutritionist_id,
+    nextAppointment: p.next_appointment,
   }
 }

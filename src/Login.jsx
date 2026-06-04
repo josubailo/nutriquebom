@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { supabase } from './supabase'
-import { Utensils, Mail, Lock, User, ArrowRight, Loader } from 'lucide-react'
+import { Utensils, Mail, Lock, ArrowRight, Loader } from 'lucide-react'
 
 const STYLE = `
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600;700&display=swap');
@@ -185,8 +185,8 @@ const STYLE = `
 `
 
 export default function Login() {
-  const [mode, setMode] = useState('login') // 'login' | 'register' | 'reset'
-  const [form, setForm] = useState({ name: '', email: '', password: '' })
+  const [mode, setMode] = useState('login') // 'login' | 'reset'
+  const [form, setForm] = useState({ email: '', password: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -203,25 +203,6 @@ export default function Login() {
     if (error) setError(error.message === 'Invalid login credentials'
       ? 'E-mail ou senha incorretos.'
       : error.message)
-    setLoading(false)
-  }
-
-  const handleRegister = async (e) => {
-    e.preventDefault()
-    if (!form.name.trim()) { setError('Informe seu nome.'); return }
-    setError(''); setSuccess(''); setLoading(true)
-    const { error } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-      options: {
-        data: { name: form.name, role: 'nutritionist' }
-      }
-    })
-    if (error) {
-      setError(error.message)
-    } else {
-      setSuccess('Conta criada! Verifique seu e-mail para confirmar o cadastro.')
-    }
     setLoading(false)
   }
 
@@ -287,41 +268,7 @@ export default function Login() {
                 </button>
               </form>
               <div className="login-toggle">
-                Não tem conta?{' '}
-                <button onClick={() => { setMode('register'); setError(''); setSuccess('') }}>Criar conta</button>
-              </div>
-            </>
-          )}
-
-          {mode === 'register' && (
-            <>
-              <h2>Criar conta</h2>
-              <p className="sub">Cadastre-se como nutricionista.</p>
-              {error   && <div className="login-error">{error}</div>}
-              {success && <div className="login-success">{success}</div>}
-              <form onSubmit={handleRegister}>
-                <div className="login-field">
-                  <User size={18} />
-                  <input type="text" placeholder="Seu nome completo" value={form.name}
-                    onChange={e => up('name', e.target.value)} required />
-                </div>
-                <div className="login-field">
-                  <Mail size={18} />
-                  <input type="email" placeholder="Seu e-mail" value={form.email}
-                    onChange={e => up('email', e.target.value)} required />
-                </div>
-                <div className="login-field">
-                  <Lock size={18} />
-                  <input type="password" placeholder="Senha (mín. 6 caracteres)" value={form.password}
-                    onChange={e => up('password', e.target.value)} required minLength={6} />
-                </div>
-                <button className="login-btn" disabled={loading}>
-                  {loading ? <Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <><ArrowRight size={18} /> Criar conta</>}
-                </button>
-              </form>
-              <div className="login-toggle">
-                Já tem conta?{' '}
-                <button onClick={() => { setMode('login'); setError(''); setSuccess('') }}>Entrar</button>
+                <button onClick={() => { setMode('reset'); setError(''); setSuccess('') }}>Esqueceu a senha?</button>
               </div>
             </>
           )}

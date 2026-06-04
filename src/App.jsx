@@ -3,21 +3,23 @@ import {
   Users, CalendarDays, Activity, FlaskConical, UserCircle, Utensils,
   Plus, Search, X, Copy, ChevronDown, ChevronUp, Pencil, Trash2,
   ArrowLeft, FileDown, Save, ClipboardList, Pill, Repeat, Mail, Phone, Cake,
-  Camera, Ruler, Scale, TrendingUp, Percent, ImageIcon, Apple, FileText, LogOut
+  Camera, Ruler, Scale, TrendingUp, Percent, ImageIcon, Apple, FileText, LogOut,
+  Video, HelpCircle, Send, Lock
 } from "lucide-react";
-import { supabase } from "./supabase";
+import { supabase, supabaseAdmin } from "./supabase";
 import * as db from "./db";
 import Login from "./Login";
 import PatientPortal from "./PatientPortal";
+import { NP_STYLE } from "./npStyles";
+//import "./supabase"; APENAS TESTE DO BD
 
 /* ============================================================
    NutriPlano — app de nutrição (nome provisório, fácil de trocar)
    ============================================================ */
 const APP_NAME = "Nutriquébom";
 
-/* ---------- Tema / CSS ---------- */
-const STYLE = `
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600;700&display=swap');
+/* ---------- Tema / CSS — definido em npStyles.js ---------- */
+const _STYLE_START = `
 
 .np * { box-sizing: border-box; }
 .np {
@@ -260,7 +262,8 @@ const STYLE = `
   .np-print table { width:100%; border-collapse:collapse; }
   .np-print td, .np-print th { padding:7px 10px; text-align:left; border-bottom:1px solid #e4e9e3; font-size:13px; }
 }
-`;
+`; // _STYLE_START (não usado — mantido apenas como referência histórica)
+const STYLE = NP_STYLE;
 
 /* ---------- Dados ---------- */
 const ACTIVITY = [
@@ -715,10 +718,40 @@ export default function App() {
   const patients = data.patients;
   const dietsOf  = (pid) => data.diets[pid] || [];
 
-  const addPatient = (p) => {
-    const novo = { id: uid(), createdAt: Date.now(), ...p };
+  const addPatient = async (p, onDone, onError) => {
+    const { password, ...patientFields } = p;
+    let userId = null;
+
+    // Se informou email + senha, cria a conta de acesso do paciente
+    if (patientFields.email && password) {
+      if (!supabaseAdmin) {
+        onError?.('Configure a VITE_SUPABASE_SERVICE_KEY no arquivo .env para criar contas de pacientes.');
+        return;
+      }
+      const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+        email: patientFields.email,
+        password,
+        email_confirm: true,
+        user_metadata: { name: patientFields.name, role: 'patient' },
+      });
+      if (authErr) {
+        onError?.(authErr.message === 'User already registered'
+          ? 'Este e-mail já possui uma conta cadastrada.'
+          : authErr.message);
+        return;
+      }
+      userId = authData.user.id;
+    }
+
+    const novo = { id: uid(), createdAt: Date.now(), ...patientFields, userId };
     setData((d) => ({ ...d, patients: [novo, ...d.patients] }));
     db.insertPatient(user.id, novo);
+    onDone?.();
+  };
+
+  const saveNextAppointment = (pid, date) => {
+    setData((d) => ({ ...d, patients: d.patients.map(p => p.id === pid ? { ...p, nextAppointment: date } : p) }));
+    db.setNextAppointment(user.id, pid, date);
   };
 
   const saveDiet = (pid, diet) => {
@@ -811,10 +844,30 @@ export default function App() {
   const allFoods = foods;
 
   /* ── Render guards ── */
+  const ADMIN_EMAIL = 'josuebailonutri@gmail.com';
   if (authLoading) return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', fontFamily: 'sans-serif', color: '#5d6f66' }}>Carregando…</div>;
   if (!user) return <Login />;
-  if (profile?.role === 'patient' && patientData) return <PatientPortal patientData={patientData} user={user} />;
-  if (profile?.role === 'patient' && !patientData) return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', fontFamily: 'sans-serif', color: '#5d6f66' }}>Carregando dados…</div>;
+
+  // Ainda carregando o perfil
+  if (!profile) return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', fontFamily: 'sans-serif', color: '#5d6f66' }}>Carregando…</div>;
+
+  // Portal do paciente
+  if (profile.role === 'patient' && patientData) return <PatientPortal patientData={patientData} user={user} />;
+  if (profile.role === 'patient' && !patientData) return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', fontFamily: 'sans-serif', color: '#5d6f66' }}>Carregando dados…</div>;
+
+  // Bloqueia qualquer usuário que não seja o admin
+  if (user.email !== ADMIN_EMAIL) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f4f6f3', fontFamily: "'DM Sans', sans-serif" }}>
+        <div style={{ textAlign: 'center', maxWidth: 360, padding: 32 }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+          <h2 style={{ fontFamily: "'Fraunces', serif", color: '#16241d', marginBottom: 8 }}>Acesso restrito</h2>
+          <p style={{ color: '#5d6f66', marginBottom: 24 }}>Esta conta não tem acesso ao painel administrativo. Entre em contato com seu nutricionista.</p>
+          <button onClick={() => supabase.auth.signOut()} style={{ background: '#1f9d63', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 24px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Sair</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="np">
@@ -849,7 +902,8 @@ export default function App() {
 
         <main className="main">
           {!loaded ? <div className="empty">Carregando…</div> :
-            view === "patients" ? <PatientsView patients={patients} onAdd={addPatient} onNewDiet={openNewDiet} onHistory={(p) => { setActivePatient(p); setView("history"); }} onAssessment={openAssessment} onExams={openExams} onAnamnese={openAnamnese} dietsOf={dietsOf} /> :
+            view === "patients" ? <PatientsView patients={patients} onAdd={addPatient} onNewDiet={openNewDiet} onHistory={(p) => { setActivePatient(p); setView("history"); }} onAssessment={openAssessment} onExams={openExams} onAnamnese={openAnamnese} dietsOf={dietsOf} onPortal={(p) => { setActivePatient(p); setView("portal"); }} /> :
+            view === "portal" ? <PatientPortalAdmin patient={activePatient} nutritionistId={user.id} onSaveAppt={(d) => saveNextAppointment(activePatient.id, d)} onBack={() => setView("patients")} /> :
             view === "agenda" ? <AgendaView patients={patients} appointments={data.appointments} onAdd={addAppt} /> :
             view === "myfoods" ? <MyFoodsView foods={foods} onAdd={addFood} onUpdate={updateFood} onDel={delFood} /> :
             view === "assessment" ? <AssessmentView patient={activePatient} assessments={assessOf(activePatient?.id)} onSave={(a) => saveAssessment(activePatient.id, a)} onDel={(aid) => delAssessment(activePatient.id, aid)} onPickPatient={() => setView("patients")} /> :
@@ -866,7 +920,7 @@ export default function App() {
 }
 
 /* ---------- Pacientes ---------- */
-function PatientsView({ patients, onAdd, onNewDiet, onHistory, onAssessment, onExams, onAnamnese, dietsOf }) {
+function PatientsView({ patients, onAdd, onNewDiet, onHistory, onAssessment, onExams, onAnamnese, dietsOf, onPortal }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const list = patients.filter((p) => p.name.toLowerCase().includes(q.toLowerCase()));
@@ -898,31 +952,69 @@ function PatientsView({ patients, onAdd, onNewDiet, onHistory, onAssessment, onE
                 <button className="btn sm ghost" onClick={() => onAssessment(p)}><Activity size={15} /> Avaliação</button>
                 <button className="btn sm ghost" onClick={() => onExams(p)}><FlaskConical size={15} /> Exames</button>
                 <button className="btn sm ghost wide" onClick={() => onAnamnese(p)}><FileText size={15} /> Anamnese</button>
+                <button className="btn sm ghost wide" onClick={() => onPortal(p)} style={{ color: '#1f9d63', borderColor: '#cde8d8' }}><UserCircle size={15} /> Portal do Paciente</button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {open && <PatientModal onClose={() => setOpen(false)} onSave={(p) => { onAdd(p); setOpen(false); }} />}
+      {open && <PatientModal onClose={() => setOpen(false)} onSave={onAdd} />}
     </>
   );
 }
 
 function PatientModal({ onClose, onSave }) {
-  const [f, setF] = useState({ name: "", sex: "", email: "", phone: "", birth: "", notes: "" });
+  const [f, setF]       = useState({ name: "", sex: "", email: "", phone: "", birth: "", notes: "", password: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState("");
   const up = (k, v) => setF((s) => ({ ...s, [k]: v }));
+
+  const handleSave = async () => {
+    if (!f.name) return;
+    if (f.email && !f.password) { setError("Informe uma senha para o paciente acessar o portal."); return; }
+    if (f.password && f.password.length < 6) { setError("A senha precisa ter pelo menos 6 caracteres."); return; }
+    setLoading(true); setError("");
+    await onSave(f, () => { setLoading(false); onClose(); }, (msg) => { setError(msg); setLoading(false); });
+  };
+
   return (
     <div className="modal-bg" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
         <h3>Novo Paciente <button className="x" onClick={onClose}><X size={20} /></button></h3>
-        <div className="row"><label className="lbl"><UserCircle size={14} /> Nome *</label><input className="field" value={f.name} onChange={(e) => up("name", e.target.value)} placeholder="Nome do paciente" /></div>
+
+        {error && <div style={{ background: '#fde8e9', border: '1px solid #f3c5c6', color: '#9b1c1f', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13 }}>{error}</div>}
+
+        <div className="row"><label className="lbl"><UserCircle size={14} /> Nome completo *</label><input className="field" value={f.name} onChange={(e) => up("name", e.target.value)} placeholder="Nome do paciente" /></div>
         <div className="row"><label className="lbl"><Users size={14} /> Sexo</label><select className="field" value={f.sex} onChange={(e) => up("sex", e.target.value)}><option value="">Selecione</option><option>Masculino</option><option>Feminino</option></select></div>
-        <div className="row"><label className="lbl"><Mail size={14} /> Email</label><input className="field" value={f.email} onChange={(e) => up("email", e.target.value)} placeholder="email@exemplo.com" /></div>
-        <div className="row"><label className="lbl"><Phone size={14} /> Telefone</label><input className="field" value={f.phone} onChange={(e) => up("phone", e.target.value)} placeholder="(00) 00000-0000" /></div>
-        <div className="row"><label className="lbl"><Cake size={14} /> Data de Nascimento</label><input type="date" className="field" value={f.birth} onChange={(e) => up("birth", e.target.value)} /></div>
-        <div className="row"><label className="lbl"><ClipboardList size={14} /> Observações</label><textarea className="field" rows={3} value={f.notes} onChange={(e) => up("notes", e.target.value)} placeholder="Anotações sobre o paciente…" /></div>
-        <div className="foot"><button className="btn ghost" onClick={onClose}>Cancelar</button><button className="btn" disabled={!f.name} onClick={() => f.name && onSave(f)}>Criar Paciente</button></div>
+        <div className="two">
+          <div><label className="lbl"><Phone size={14} /> Telefone</label><input className="field" value={f.phone} onChange={(e) => up("phone", e.target.value)} placeholder="(00) 00000-0000" /></div>
+          <div><label className="lbl"><Cake size={14} /> Nascimento</label><input type="date" className="field" value={f.birth} onChange={(e) => up("birth", e.target.value)} /></div>
+        </div>
+        <div className="row"><label className="lbl"><ClipboardList size={14} /> Observações</label><textarea className="field" rows={2} value={f.notes} onChange={(e) => up("notes", e.target.value)} placeholder="Anotações sobre o paciente…" /></div>
+
+        {/* Separador de acesso ao portal */}
+        <div style={{ borderTop: '1px solid #e4e9e3', margin: '16px 0 14px', paddingTop: 14 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: '#1f9d63', marginBottom: 4 }}>🔑 Acesso ao Portal do Paciente</div>
+          <div style={{ fontSize: 12, color: '#5d6f66', marginBottom: 12 }}>Opcional — preencha para que o paciente possa entrar no portal.</div>
+          <div className="row" style={{ marginBottom: 12 }}>
+            <label className="lbl"><Mail size={14} /> E-mail de acesso</label>
+            <input className="field" type="email" value={f.email} onChange={(e) => up("email", e.target.value)} placeholder="email@paciente.com" />
+          </div>
+          {f.email && (
+            <div className="row">
+              <label className="lbl"><Lock size={14} /> Senha de acesso (mín. 6 caracteres)</label>
+              <input className="field" type="password" value={f.password} onChange={(e) => up("password", e.target.value)} placeholder="Crie uma senha para o paciente" />
+            </div>
+          )}
+        </div>
+
+        <div className="foot">
+          <button className="btn ghost" onClick={onClose} disabled={loading}>Cancelar</button>
+          <button className="btn" disabled={!f.name || loading} onClick={handleSave}>
+            {loading ? "Criando…" : "Criar Paciente"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1886,6 +1978,141 @@ function ProfileView({ profile, onSave }) {
       </div>
     </>
   );
+}
+
+/* ── Portal do Paciente — visão do admin ──────────────────── */
+function PatientPortalAdmin({ patient, nutritionistId, onSaveAppt, onBack }) {
+  const [tab, setTab]           = useState('appointment')
+  const [appt, setAppt]         = useState(patient?.nextAppointment || '')
+  const [messages, setMessages] = useState(null)
+  const [photos, setPhotos]     = useState(null)
+  const [videoReqs, setVideoReqs] = useState(null)
+  const [reply, setReply]       = useState({})
+  const [replying, setReplying] = useState(null)
+
+  React.useEffect(() => {
+    if (!patient) return
+    db.loadPatientMessages(nutritionistId).then(all => setMessages(all.filter(m => m.patient_id === patient.id)))
+    db.loadVideoRequests(nutritionistId).then(all => setVideoReqs(all.filter(r => r.patient_id === patient.id)))
+    db.loadPatientPhotos(nutritionistId, patient.id).then(setPhotos)
+  }, [patient?.id])
+
+  if (!patient) return null
+
+  const sendReply = async (msgId) => {
+    const text = reply[msgId]
+    if (!text?.trim()) return
+    await db.replyToMessage(msgId, text.trim())
+    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, reply: text.trim(), replied_at: new Date().toISOString() } : m))
+    setReplying(null)
+  }
+
+  const updateVideoStatus = async (id, status) => {
+    await db.updateVideoRequestStatus(id, status)
+    setVideoReqs(prev => prev.map(r => r.id === id ? { ...r, status } : r))
+  }
+
+  const tabStyle = (t) => ({ padding: '10px 20px', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: 14, fontFamily: "'DM Sans', sans-serif", background: tab === t ? '#1f9d63' : '#fff', color: tab === t ? '#fff' : '#5d6f66', transition: '.15s' })
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }}>
+        <button className="btn sm ghost" onClick={onBack}><ArrowLeft size={16} /> Voltar</button>
+        <h1 className="title" style={{ margin: 0 }}>Portal — <span>{patient.name}</span></h1>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
+        {[['appointment','Próxima Consulta'],['messages','Dúvidas'],['photos','Fotos'],['video','Vídeo Chamada']].map(([t,l]) => (
+          <button key={t} style={tabStyle(t)} onClick={() => setTab(t)}>{l}</button>
+        ))}
+      </div>
+
+      {tab === 'appointment' && (
+        <div className="panel" style={{ maxWidth: 480 }}>
+          <h2 style={{ marginBottom: 16 }}>Definir próxima consulta</h2>
+          <p className="ph">Esta data aparecerá no portal do paciente.</p>
+          <label className="lbl"><CalendarDays size={14} /> Data da próxima consulta</label>
+          <input type="date" className="field" value={appt} onChange={e => setAppt(e.target.value)} style={{ marginBottom: 14 }} />
+          <button className="btn" onClick={() => { onSaveAppt(appt); }}>
+            <Save size={16} /> Salvar data
+          </button>
+        </div>
+      )}
+
+      {tab === 'messages' && (
+        <>
+          <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, marginBottom: 16 }}>Dúvidas de {patient.name}</h2>
+          {messages === null ? <div className="empty">Carregando…</div> :
+           messages.length === 0 ? <div className="empty"><HelpCircle size={36} style={{ opacity: .4 }} /><p>Nenhuma dúvida enviada.</p></div> :
+           messages.map(m => (
+            <div key={m.id} className="panel" style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 13, color: '#5d6f66', marginBottom: 8 }}>{new Date(m.created_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', year:'numeric' })}</div>
+              <div style={{ fontSize: 15, marginBottom: 12, lineHeight: 1.5 }}>{m.content}</div>
+              {m.reply ? (
+                <div style={{ background: '#e7f4ec', border: '1px solid #cde8d8', borderRadius: 10, padding: '10px 14px', fontSize: 14 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: '#157a4c', marginBottom: 4 }}>Sua resposta:</div>
+                  {m.reply}
+                </div>
+              ) : replying === m.id ? (
+                <div>
+                  <textarea className="field" rows={3} value={reply[m.id] || ''} onChange={e => setReply(r => ({ ...r, [m.id]: e.target.value }))} placeholder="Escreva sua resposta…" style={{ marginBottom: 10, resize: 'vertical' }} />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="btn sm" onClick={() => sendReply(m.id)}><Send size={14} /> Responder</button>
+                    <button className="btn sm ghost" onClick={() => setReplying(null)}>Cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                <button className="btn sm ghost" onClick={() => setReplying(m.id)}><Send size={14} /> Responder</button>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+
+      {tab === 'photos' && (
+        <>
+          <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, marginBottom: 16 }}>Fotos de {patient.name}</h2>
+          {photos === null ? <div className="empty">Carregando…</div> :
+           photos.length === 0 ? <div className="empty"><Camera size={36} style={{ opacity: .4 }} /><p>Nenhuma foto enviada.</p></div> : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px,1fr))', gap: 14 }}>
+              {photos.map(p => (
+                <div key={p.id} style={{ background: '#fff', border: '1px solid #e4e9e3', borderRadius: 14, overflow: 'hidden' }}>
+                  <img src={p.public_url} alt={p.caption || 'foto'} style={{ width: '100%', height: 180, objectFit: 'cover' }} />
+                  <div style={{ padding: '10px 12px' }}>
+                    {p.caption && <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>{p.caption}</div>}
+                    <div style={{ color: '#5d6f66', fontSize: 12 }}>{new Date(p.created_at).toLocaleDateString('pt-BR')}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === 'video' && (
+        <>
+          <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, marginBottom: 16 }}>Solicitações de vídeo chamada</h2>
+          {videoReqs === null ? <div className="empty">Carregando…</div> :
+           videoReqs.length === 0 ? <div className="empty"><Video size={36} style={{ opacity: .4 }} /><p>Nenhuma solicitação.</p></div> :
+           videoReqs.map(r => (
+            <div key={r.id} className="panel" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 16 }}>
+              <Video size={20} style={{ color: '#1f9d63', flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600 }}>{r.preferred_date ? new Date(r.preferred_date + 'T12:00:00').toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' }) : '—'}</div>
+                {r.message && <div style={{ color: '#5d6f66', fontSize: 13, marginTop: 2 }}>{r.message}</div>}
+                <div style={{ color: '#5d6f66', fontSize: 12, marginTop: 2 }}>{new Date(r.created_at).toLocaleDateString('pt-BR')}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {r.status !== 'approved' && <button className="btn sm" onClick={() => updateVideoStatus(r.id, 'approved')}>Aprovar</button>}
+                {r.status !== 'rejected' && <button className="btn sm danger" onClick={() => updateVideoStatus(r.id, 'rejected')}>Recusar</button>}
+                {r.status === 'approved' && <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 999, background: '#e7f4ec', color: '#157a4c', fontWeight: 600 }}>Aprovada</span>}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+    </>
+  )
 }
 
 function PrintView({ diet, patient, profile }) {
