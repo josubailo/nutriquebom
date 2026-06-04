@@ -904,13 +904,13 @@ export default function App() {
           {!loaded ? <div className="empty">Carregando…</div> :
             view === "patients" ? <PatientsView patients={patients} onAdd={addPatient} onNewDiet={openNewDiet} onHistory={(p) => { setActivePatient(p); setView("history"); }} onAssessment={openAssessment} onExams={openExams} onAnamnese={openAnamnese} dietsOf={dietsOf} onPortal={(p) => { setActivePatient(p); setView("portal"); }} /> :
             view === "portal" ? <PatientPortalAdmin patient={activePatient} nutritionistId={user.id} onSaveAppt={(d) => saveNextAppointment(activePatient.id, d)} onBack={() => setView("patients")} /> :
-            view === "agenda" ? <AgendaView patients={patients} appointments={data.appointments} onAdd={addAppt} /> :
+            view === "agenda" ? <AgendaView patients={patients} /> :
             view === "myfoods" ? <MyFoodsView foods={foods} onAdd={addFood} onUpdate={updateFood} onDel={delFood} /> :
             view === "assessment" ? <AssessmentView patient={activePatient} assessments={assessOf(activePatient?.id)} onSave={(a) => saveAssessment(activePatient.id, a)} onDel={(aid) => delAssessment(activePatient.id, aid)} onPickPatient={() => setView("patients")} /> :
             view === "exams" ? <ExamsView patient={activePatient} exams={examsOf(activePatient?.id)} onSave={(e) => saveExam(activePatient.id, e)} onDel={(eid) => delExam(activePatient.id, eid)} onPickPatient={() => setView("patients")} /> :
             view === "anamnese" ? <AnamneseView key={activePatient?.id} patient={activePatient} template={data.anamneseTemplate || DEFAULT_ANAMNESE} answers={anamneseOf(activePatient?.id)} onSaveAnswers={(a) => saveAnamnese(activePatient.id, a)} onSaveTemplate={saveTemplate} onPickPatient={() => setView("patients")} /> :
             view === "profile" ? <ProfileView profile={data.profile || {}} onSave={saveProfile} /> :
-            view === "history" ? <HistoryView patient={activePatient} diets={dietsOf(activePatient?.id)} onOpen={(d) => openDiet(activePatient, d)} onNew={() => openNewDiet(activePatient)} onDel={(did) => delDiet(activePatient.id, did)} onDuplicate={(d) => { const copy = { ...JSON.parse(JSON.stringify(d)), id: uid(), name: d.name + " (cópia)", createdAt: Date.now() }; saveDiet(activePatient.id, copy); }} /> :
+            view === "history" ? <HistoryView patient={activePatient} diets={dietsOf(activePatient?.id)} onOpen={(d) => openDiet(activePatient, d)} onNew={() => openNewDiet(activePatient)} onDel={(did) => delDiet(activePatient.id, did)} onDuplicate={(d) => { const copy = { ...JSON.parse(JSON.stringify(d)), id: uid(), name: d.name + " (cópia)", createdAt: Date.now() }; saveDiet(activePatient.id, copy); }} onRename={(did, name) => { const diet = dietsOf(activePatient.id).find(x => x.id === did); if (diet) saveDiet(activePatient.id, { ...diet, name }); }} /> :
             view === "builder" ? <Builder patient={activePatient} diet={activeDiet} setDiet={setActiveDiet} foods={allFoods} profile={data.profile || {}} onSave={() => { saveDiet(activePatient.id, activeDiet); setView("history"); }} onBack={() => setView("history")} /> :
             null}
         </main>
@@ -1021,24 +1021,56 @@ function PatientModal({ onClose, onSave }) {
 }
 
 /* ---------- Histórico (base da periodização) ---------- */
-function HistoryView({ patient, diets, onOpen, onNew, onDel, onDuplicate }) {
+function HistoryView({ patient, diets, onOpen, onNew, onDel, onDuplicate, onRename }) {
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameVal, setRenameVal]   = useState("");
+
   if (!patient) return <div className="empty">Selecione um paciente.</div>;
+
+  const startRename = (d) => { setRenamingId(d.id); setRenameVal(d.name); };
+  const confirmRename = (d) => {
+    if (renameVal.trim() && renameVal.trim() !== d.name) onRename(d.id, renameVal.trim());
+    setRenamingId(null);
+  };
+
   return (
     <>
       <div className="topbar"><h1 className="title" style={{ flex: 1 }}>Dietas — <span>{patient.name}</span></h1><button className="btn" onClick={onNew}><Plus size={17} /> Nova Dieta</button></div>
       <p className="sub" style={{ marginTop: -14, marginBottom: 18 }}>Cada plano fica salvo aqui. Para periodizar, duplique um plano e ajuste calorias/macros para a próxima fase.</p>
       {diets.length === 0 ? <div className="empty"><ClipboardList size={40} style={{ opacity: .4 }} /><p>Nenhuma dieta montada ainda.</p></div> :
-        diets.map((d) => {
+        diets.map((d, idx) => {
           const tgt = computeTargets(d);
+          const isRenaming = renamingId === d.id;
           return (
-            <div className="panel" key={d.id} style={{ display: "flex", alignItems: "center", gap: 16, padding: 18 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 16 }}>{d.name}</div>
-                <div className="sub" style={{ fontSize: 13 }}>{new Date(d.createdAt).toLocaleDateString("pt-BR")} · {r0(tgt.kcal)} kcal · {r0(tgt.p)}g P / {r0(tgt.c)}g C / {r0(tgt.f)}g G</div>
+            <div className="panel" key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: 18, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {isRenaming ? (
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input
+                      className="field"
+                      value={renameVal}
+                      autoFocus
+                      onChange={e => setRenameVal(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") confirmRename(d); if (e.key === "Escape") setRenamingId(null); }}
+                      style={{ maxWidth: 280 }}
+                    />
+                    <button className="btn sm" onClick={() => confirmRename(d)}><Save size={14} /></button>
+                    <button className="btn sm ghost" onClick={() => setRenamingId(null)}>Cancelar</button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ fontWeight: 700, fontSize: 16 }}>{d.name}</div>
+                    {idx === 0 && <span style={{ fontSize: 11, background: 'var(--green-soft)', color: 'var(--green-d)', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>Atual</span>}
+                    <button className="iconbtn" title="Renomear" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-soft)", padding: 3 }} onClick={() => startRename(d)}><Pencil size={13} /></button>
+                  </div>
+                )}
+                {!isRenaming && <div className="sub" style={{ fontSize: 13 }}>{new Date(d.createdAt).toLocaleDateString("pt-BR")} · {r0(tgt.kcal)} kcal · {r0(tgt.p)}g P / {r0(tgt.c)}g C / {r0(tgt.f)}g G</div>}
               </div>
-              <button className="btn sm ghost" onClick={() => onOpen(d)}><Pencil size={15} /> Abrir</button>
-              <button className="btn sm ghost" onClick={() => onDuplicate(d)}><Copy size={15} /> Duplicar</button>
-              <button className="btn sm danger" onClick={() => onDel(d.id)}><Trash2 size={15} /></button>
+              {!isRenaming && <>
+                <button className="btn sm ghost" onClick={() => onOpen(d)}><Pencil size={15} /> Abrir</button>
+                <button className="btn sm ghost" onClick={() => onDuplicate(d)}><Copy size={15} /> Duplicar</button>
+                <button className="btn sm danger" onClick={() => onDel(d.id)}><Trash2 size={15} /></button>
+              </>}
             </div>
           );
         })}
@@ -1047,33 +1079,47 @@ function HistoryView({ patient, diets, onOpen, onNew, onDel, onDuplicate }) {
 }
 
 /* ---------- Agenda ---------- */
-function AgendaView({ patients, appointments, onAdd }) {
-  const [f, setF] = useState({ patientId: "", date: "", time: "", note: "" });
-  const up = (k, v) => setF((s) => ({ ...s, [k]: v }));
-  const sorted = [...appointments].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+function AgendaView({ patients }) {
+  // Mostra somente consultas definidas via Portal do Paciente (nextAppointment)
+  const withAppt = patients
+    .filter(p => p.nextAppointment)
+    .sort((a, b) => (a.nextAppointment || '').localeCompare(b.nextAppointment || ''));
+  const hoje = new Date().toISOString().slice(0, 10);
+  const proximas = withAppt.filter(p => (p.nextAppointment || '') >= hoje);
+  const passadas  = withAppt.filter(p => (p.nextAppointment || '') < hoje);
+
+  const renderRow = (p) => (
+    <div key={p.id} className="item">
+      <div className="avatar" style={{ width: 34, height: 34, flexShrink: 0 }}><UserCircle size={18} /></div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 600 }}>{p.name}</div>
+        {p.phone && <div className="iqt">{p.phone}</div>}
+      </div>
+      <div className="imac" style={{ fontWeight: 700, color: 'var(--green-d)' }}>
+        {new Date(p.nextAppointment + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+      </div>
+    </div>
+  );
+
   return (
     <>
       <h1 className="title">Minha <span>Agenda</span></h1>
-      <p className="sub">Agende e acompanhe suas consultas</p>
-      <div className="panel" style={{ marginTop: 20 }}>
-        <h2>Nova consulta</h2>
-        <div className="two" style={{ marginTop: 14 }}>
-          <div><label className="lbl">Paciente</label><select className="field" value={f.patientId} onChange={(e) => up("patientId", e.target.value)}><option value="">Selecione</option>{patients.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-          <div><label className="lbl">Observação</label><input className="field" value={f.note} onChange={(e) => up("note", e.target.value)} placeholder="Ex.: retorno, avaliação…" /></div>
-        </div>
-        <div className="two">
-          <div><label className="lbl">Data</label><input type="date" className="field" value={f.date} onChange={(e) => up("date", e.target.value)} /></div>
-          <div><label className="lbl">Horário</label><input type="time" className="field" value={f.time} onChange={(e) => up("time", e.target.value)} /></div>
-        </div>
-        <button className="btn" disabled={!f.patientId || !f.date} onClick={() => { onAdd(f); setF({ patientId: "", date: "", time: "", note: "" }); }}><Plus size={17} /> Agendar</button>
+      <p className="sub">Consultas definidas no Portal do Paciente</p>
+      <div className="infobox" style={{ marginTop: 20 }}>
+        Para agendar ou alterar uma consulta, acesse <b>Meus Pacientes → Portal do Paciente</b> e defina a data de "Próxima Consulta".
       </div>
-      <div className="panel">
-        <h2>Próximas consultas</h2>
-        {sorted.length === 0 ? <div className="empty" style={{ padding: 30 }}>Nenhuma consulta agendada.</div> :
-          sorted.map((a) => { const p = patients.find((x) => x.id === a.patientId); return (
-            <div key={a.id} className="item"><div style={{ fontWeight: 600 }}>{p?.name || "—"}</div><div className="iqt" style={{ marginLeft: 12 }}>{a.note}</div><div className="imac">{a.date ? new Date(a.date).toLocaleDateString("pt-BR") : ""} {a.time}</div></div>
-          ); })}
+      <div className="panel" style={{ marginTop: 0 }}>
+        <h2>Próximas consultas ({proximas.length})</h2>
+        {proximas.length === 0
+          ? <div className="empty" style={{ padding: 30 }}>Nenhuma consulta futura agendada.</div>
+          : proximas.map(renderRow)}
       </div>
+      {passadas.length > 0 && (
+        <div className="panel">
+          <h2 style={{ color: 'var(--ink-soft)' }}>Consultas passadas ({passadas.length})</h2>
+          {passadas.map(renderRow)}
+        </div>
+      )}
     </>
   );
 }
@@ -1382,6 +1428,8 @@ function FoodModal({ meal, foods, onClose, onAdd }) {
 /* ---------- Avaliação Física ---------- */
 function AssessmentView({ patient, assessments, onSave, onDel, onPickPatient }) {
   const [tab, setTab] = useState("new");
+  const [editingId, setEditingId] = useState(null);
+
   if (!patient) {
     return (
       <>
@@ -1390,6 +1438,9 @@ function AssessmentView({ patient, assessments, onSave, onDel, onPickPatient }) 
       </>
     );
   }
+
+  const editingAssessment = editingId ? assessments.find(a => a.id === editingId) : null;
+
   return (
     <>
       <div className="topbar" style={{ marginBottom: 6 }}>
@@ -1397,12 +1448,12 @@ function AssessmentView({ patient, assessments, onSave, onDel, onPickPatient }) 
         <div><div style={{ fontSize: 12, color: "var(--ink-soft)" }}>Avaliação Física</div><div className="ttl" style={{ fontSize: 20 }}>{patient.name}</div></div>
       </div>
       <div className="tabs">
-        <button className={"tabbtn" + (tab === "history" ? " on" : "")} onClick={() => setTab("history")}><TrendingUp size={17} /> Histórico e Comparação</button>
-        <button className={"tabbtn" + (tab === "new" ? " on" : "")} onClick={() => setTab("new")}><Plus size={17} /> Nova Avaliação</button>
+        <button className={"tabbtn" + (tab === "history" ? " on" : "")} onClick={() => { setTab("history"); setEditingId(null); }}><TrendingUp size={17} /> Histórico e Comparação</button>
+        <button className={"tabbtn" + (tab === "new" ? " on" : "")} onClick={() => { setTab("new"); setEditingId(null); }}><Plus size={17} /> {editingId ? "Editando Avaliação" : "Nova Avaliação"}</button>
       </div>
       {tab === "new"
-        ? <AssessmentWizard patient={patient} onSave={(a) => { onSave(a); setTab("history"); }} />
-        : <AssessmentHistory assessments={assessments} onDel={onDel} onNew={() => setTab("new")} />}
+        ? <AssessmentWizard key={editingId || "new"} patient={patient} initialData={editingAssessment} onSave={(a) => { onSave(a); setTab("history"); setEditingId(null); }} />
+        : <AssessmentHistory assessments={assessments} onEdit={(id) => { setEditingId(id); setTab("new"); }} onNew={() => { setEditingId(null); setTab("new"); }} />}
     </>
   );
 }
@@ -1436,8 +1487,8 @@ function NumGrid({ keys, labels, values, onChange, cols = 3, unit = "cm" }) {
   );
 }
 
-function AssessmentWizard({ patient, onSave }) {
-  const [a, setA] = useState(() => newAssessment(patient));
+function AssessmentWizard({ patient, onSave, initialData }) {
+  const [a, setA] = useState(() => initialData ? { ...initialData } : newAssessment(patient));
   const [step, setStep] = useState(0);
   const steps = ASSESS_STEPS[a.method] || ASSESS_STEPS.null;
   const up = (k, v) => setA((s) => ({ ...s, [k]: v }));
@@ -1618,13 +1669,14 @@ function MiniChart({ points, color, suffix }) {
   );
 }
 
-function AssessmentHistory({ assessments, onDel, onNew }) {
-  const sorted = [...assessments].sort((a, b) => a.date.localeCompare(b.date));
+function AssessmentHistory({ assessments, onEdit, onNew }) {
+  const sorted = [...assessments].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   if (sorted.length === 0)
     return <div className="empty"><Activity size={40} style={{ opacity: .4 }} /><p>Nenhuma avaliação registrada ainda.</p><button className="btn" onClick={onNew}><Plus size={16} /> Nova Avaliação</button></div>;
   const rows = sorted.map((a) => ({ a, r: assessResults(a) }));
-  const wPoints = rows.map((x) => ({ y: r1(+x.a.weight) }));
+  const wPoints  = rows.map((x) => ({ y: r1(+x.a.weight) }));
   const bfPoints = rows.map((x) => ({ y: r1(x.r.bf) }));
+  const lmPoints = rows.map((x) => ({ y: r1(x.r.leanMass) }));
   const delta = (cur, prev) => { if (prev == null) return null; const d = cur - prev; const up = d > 0; return <span className="delta" style={{ color: Math.abs(d) < 0.05 ? "var(--ink-soft)" : up ? "#e5484d" : "#1f9d63" }}>{up ? "▲" : "▼"} {Math.abs(d).toFixed(1)}</span>; };
 
   return (
@@ -1633,6 +1685,12 @@ function AssessmentHistory({ assessments, onDel, onNew }) {
         <div className="chartcard"><div className="ct"><Scale size={15} /> Peso (kg)</div><MiniChart points={wPoints} color="#1f9d63" suffix="" /></div>
         <div className="chartcard"><div className="ct"><Percent size={15} /> % Gordura</div><MiniChart points={bfPoints} color="#e5484d" suffix="%" /></div>
       </div>
+      {lmPoints.some(p => p.y > 0) && (
+        <div className="chartwrap">
+          <div className="chartcard"><div className="ct"><TrendingUp size={15} /> Massa Magra (kg)</div><MiniChart points={lmPoints} color="#2d7ff9" suffix="" /></div>
+          <div />
+        </div>
+      )}
       <div className="panel">
         <h2 style={{ marginBottom: 12 }}>Comparativo de avaliações</h2>
         <div className="histrow"><div className="hh">Data</div><div className="hh">Peso</div><div className="hh">% Gord.</div><div className="hh">M. Magra</div><div className="hh">IMC</div><div></div></div>
@@ -1640,12 +1698,14 @@ function AssessmentHistory({ assessments, onDel, onNew }) {
           const prev = arr[idx + 1];
           return (
             <div className="histrow" key={x.a.id}>
-              <div>{new Date(x.a.date).toLocaleDateString("pt-BR")}</div>
+              <div>{x.a.date ? new Date(x.a.date + 'T12:00:00').toLocaleDateString("pt-BR") : '—'}</div>
               <div>{r1(+x.a.weight)} {delta(+x.a.weight, prev ? +prev.a.weight : null)}</div>
               <div>{r1(x.r.bf)}% {delta(x.r.bf, prev ? prev.r.bf : null)}</div>
               <div>{r1(x.r.leanMass)} kg</div>
               <div>{r1(x.r.imc)}</div>
-              <div><button className="iconbtn" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-soft)" }} onClick={() => onDel(x.a.id)}><Trash2 size={15} /></button></div>
+              <div>
+                <button className="iconbtn" title="Editar avaliação" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-soft)" }} onClick={() => onEdit(x.a.id)}><Pencil size={15} /></button>
+              </div>
             </div>
           );
         })}
@@ -1760,6 +1820,7 @@ function ExamsView({ patient, exams, onSave, onDel, onPickPatient }) {
   const [result, setResult] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [open, setOpen] = useState(false);
+  const [openGroup, setOpenGroup] = useState(null);
 
   if (!patient) {
     return (
@@ -1783,7 +1844,17 @@ function ExamsView({ patient, exams, onSave, onDel, onPickPatient }) {
     setCat(null); setQ(""); setUnit(""); setResult("");
   };
 
-  const sorted = [...exams].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  // Agrupa exames por nome e ordena por data
+  const groups = {};
+  for (const e of exams) {
+    const key = e.name || "Sem nome";
+    if (!groups[key]) groups[key] = { name: key, unit: e.unit || "", ref: e.ref || "", note: e.note || "", entries: [] };
+    groups[key].entries.push(e);
+  }
+  for (const g of Object.values(groups)) {
+    g.entries.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  }
+  const groupList = Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <>
@@ -1826,28 +1897,82 @@ function ExamsView({ patient, exams, onSave, onDel, onPickPatient }) {
           <div><label className="lbl">Data</label><input type="date" className="field" value={date} onChange={(e) => setDate(e.target.value)} /></div>
           <div style={{ display: "flex", alignItems: "flex-end" }}><button className="btn" style={{ width: "100%", justifyContent: "center" }} disabled={!q.trim() || result === ""} onClick={save}><Plus size={17} /> Salvar exame</button></div>
         </div>
-        <p className="ph" style={{ marginTop: 12, marginBottom: 0 }}>A interpretação textual com condutas por IA depende de um servidor (próxima etapa). Por ora, o app classifica por faixa de referência.</p>
       </div>
 
-      <div className="panel">
-        <h2 style={{ marginBottom: 12 }}>Exames Salvos ({exams.length})</h2>
-        {sorted.length === 0 ? (
-          <div className="empty" style={{ padding: 36 }}><FlaskConical size={36} style={{ opacity: .4 }} /><p>Nenhum exame registrado ainda.<br />Digite o nome e o resultado acima para começar.</p></div>
-        ) : sorted.map((e) => (
-          <div className="exrow" key={e.id}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600 }}>{e.name}</div>
-              <div className="iqt">{e.date ? new Date(e.date).toLocaleDateString("pt-BR") : ""}{e.ref ? ` · ref: ${e.ref} ${e.unit}` : ""}</div>
-              {e.note && <div className="iqt" style={{ marginTop: 2 }}>{e.note}</div>}
-            </div>
-            <div style={{ textAlign: "right", minWidth: 90 }}>
-              <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 18 }}>{e.result} <small style={{ fontSize: 11, color: "var(--ink-soft)" }}>{e.unit}</small></div>
-              <span className="rc" style={{ background: (e.color || "var(--ink-soft)") + "22", color: e.color || "var(--ink-soft)", fontSize: 11.5, fontWeight: 700, padding: "2px 9px", borderRadius: 999 }}>{e.status}</span>
-            </div>
-            <button className="iconbtn" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-soft)", padding: 4, marginLeft: 6 }} onClick={() => onDel(e.id)}><Trash2 size={15} /></button>
-          </div>
-        ))}
+      {/* Evolução por grupo */}
+      <div style={{ fontWeight: 700, fontSize: 17, fontFamily: "'Fraunces',serif", margin: "0 0 12px" }}>
+        Evolução por Exame ({groupList.length} marcador{groupList.length !== 1 ? "es" : ""})
       </div>
+      {groupList.length === 0 ? (
+        <div className="empty" style={{ padding: 36 }}><FlaskConical size={36} style={{ opacity: .4 }} /><p>Nenhum exame registrado ainda.<br />Digite o nome e o resultado acima para começar.</p></div>
+      ) : groupList.map((g) => {
+        const isOpen = openGroup === g.name;
+        const last = g.entries[g.entries.length - 1];
+        const statusColor = last?.color || "var(--ink-soft)";
+        const statusBg    = last?.color ? last.color + "22" : "var(--line)";
+        const chartPoints = g.entries.map(e => ({ y: r1(+e.result || 0) }));
+
+        return (
+          <div className="panel" key={g.name} style={{ padding: 0, overflow: "hidden", marginBottom: 12 }}>
+            {/* Cabeçalho do grupo */}
+            <div
+              style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 20px", cursor: "pointer", background: isOpen ? "var(--green-soft)" : "#fff", transition: ".15s" }}
+              onClick={() => setOpenGroup(isOpen ? null : g.name)}
+            >
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: isOpen ? "var(--green)" : "var(--green-soft)", display: "grid", placeItems: "center", color: isOpen ? "#fff" : "var(--green-d)", transition: ".15s", flexShrink: 0 }}>
+                <FlaskConical size={18} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700 }}>{g.name} {g.unit ? <span style={{ color: "var(--ink-soft)", fontSize: 12, fontWeight: 400 }}>({g.unit})</span> : ""}</div>
+                <div style={{ color: "var(--ink-soft)", fontSize: 13, marginTop: 2 }}>
+                  {g.entries.length} medição(ões)
+                  {last?.date && <span> · última: {new Date(last.date + "T12:00:00").toLocaleDateString("pt-BR")}</span>}
+                </div>
+              </div>
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 20 }}>{last?.result} <small style={{ fontSize: 11, color: "var(--ink-soft)" }}>{g.unit}</small></div>
+                {last?.status && last.status !== "—" && (
+                  <span style={{ fontSize: 11.5, padding: "2px 9px", borderRadius: 999, fontWeight: 700, background: statusBg, color: statusColor }}>{last.status}</span>
+                )}
+              </div>
+              {isOpen ? <ChevronUp size={18} style={{ color: "var(--ink-soft)", flexShrink: 0 }} /> : <ChevronDown size={18} style={{ color: "var(--ink-soft)", flexShrink: 0 }} />}
+            </div>
+
+            {/* Detalhes expandidos */}
+            {isOpen && (
+              <div style={{ padding: "16px 20px", borderTop: "1px solid var(--line)" }}>
+                {g.entries.length > 1 && (
+                  <div className="chartcard" style={{ marginBottom: 16 }}>
+                    <div className="ct" style={{ marginBottom: 8 }}>
+                      <TrendingUp size={14} style={{ color: "var(--green)" }} /> Evolução — {g.name}
+                      {g.ref && <span style={{ marginLeft: 8, fontSize: 12, color: "var(--ink-soft)", fontWeight: 400 }}>ref: {g.ref} {g.unit}</span>}
+                    </div>
+                    <MiniChart points={chartPoints} color={last?.color || "#1f9d63"} suffix={g.unit ? ` ${g.unit}` : ""} />
+                  </div>
+                )}
+                {g.note && <div className="infobox" style={{ marginBottom: 14 }}>{g.note}</div>}
+
+                <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 10, color: "var(--ink-soft)", textTransform: "uppercase", letterSpacing: ".04em" }}>Histórico</div>
+                {[...g.entries].reverse().map((e) => (
+                  <div key={e.id} className="exrow">
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 500 }}>{e.date ? new Date(e.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</div>
+                      {g.ref && <div className="iqt">ref: {g.ref} {g.unit}</div>}
+                    </div>
+                    <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 18 }}>
+                      {e.result} <small style={{ fontSize: 11, color: "var(--ink-soft)" }}>{g.unit}</small>
+                    </div>
+                    {e.status && e.status !== "—" && (
+                      <span style={{ fontSize: 11.5, padding: "2px 9px", borderRadius: 999, fontWeight: 700, background: (e.color || "var(--ink-soft)") + "22", color: e.color || "var(--ink-soft)" }}>{e.status}</span>
+                    )}
+                    <button className="iconbtn" title="Excluir" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-soft)", padding: 4, marginLeft: 4 }} onClick={() => onDel(e.id)}><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </>
   );
 }

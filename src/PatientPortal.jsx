@@ -3,7 +3,7 @@ import { supabase } from './supabase'
 import {
   Utensils, Activity, FlaskConical, LogOut, ChevronDown, ChevronUp,
   CalendarDays, Video, HelpCircle, Camera, Send, Check, Clock, ImageIcon,
-  FileDown, UserCircle, Pencil
+  FileDown, UserCircle, Pencil, Scale, TrendingUp, Percent
 } from 'lucide-react'
 import * as db from './db'
 import { NP_STYLE } from './npStyles'
@@ -82,7 +82,7 @@ export default function PatientPortal({ patientData }) {
             <b>Nutriquébom</b>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 16px', flexShrink: 0 }}>
             <div className="avatar" style={{ width: 36, height: 36 }}>
               <UserCircle size={20} />
             </div>
@@ -95,7 +95,7 @@ export default function PatientPortal({ patientData }) {
           {appt && (
             <div
               onClick={() => setTab('appointment')}
-              style={{ background: 'var(--green-soft)', border: '1px solid #cde8d8', borderRadius: 12, padding: '9px 12px', margin: '0 2px 12px', cursor: 'pointer' }}
+              style={{ background: 'var(--green-soft)', border: '1px solid #cde8d8', borderRadius: 12, padding: '9px 12px', margin: '0 2px 12px', cursor: 'pointer', flexShrink: 0 }}
             >
               <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--green-d)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 3 }}>Próxima consulta</div>
               <div style={{ fontWeight: 700, fontSize: 13 }}>{fmtDate(appt)}</div>
@@ -110,7 +110,7 @@ export default function PatientPortal({ patientData }) {
           ))}
 
           <div style={{ flex: 1 }} />
-          <button className="navitem" onClick={() => supabase.auth.signOut()} style={{ color: '#e5484d' }}>
+          <button className="navitem" onClick={() => supabase.auth.signOut()} style={{ color: '#e5484d', flexShrink: 0 }}>
             <LogOut size={18} /> Sair
           </button>
         </aside>
@@ -123,7 +123,7 @@ export default function PatientPortal({ patientData }) {
           {tab === 'messages'    && <PtMessages patient={patient} messages={messages} onAdd={m => setMessages(prev => [m, ...prev])} />}
           {tab === 'video'       && <PtVideo patient={patient} reqs={videoReqs} onAdd={r => setVideoReqs(prev => [r, ...prev])} />}
           {tab === 'assessments' && <PtAssessments assessments={assessments} />}
-          {tab === 'exams'       && <PtExams exams={exams} />}
+          {tab === 'exams'       && <PtExams exams={exams} patient={patient} />}
         </main>
       </div>
     </div>
@@ -133,9 +133,15 @@ export default function PatientPortal({ patientData }) {
 /* ══ DIETA ═════════════════════════════════════════════════════ */
 function PtDiets({ diets, patient }) {
   const [openId, setOpenId] = useState(null)
-  const active = diets.find(d => d.id === openId)
 
-  if (!diets.length) return (
+  // Mostra somente a dieta mais recente para o paciente
+  const sorted = [...diets].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+  const current = sorted[0] || null
+  const visibleDiets = current ? [current] : []
+
+  const active = visibleDiets.find(d => d.id === openId)
+
+  if (!current) return (
     <div className="empty">
       <Utensils size={44} style={{ opacity: .25, marginBottom: 12 }} />
       <div style={{ fontFamily: "'Fraunces',serif", fontSize: 18, marginBottom: 6 }}>Nenhuma dieta ainda</div>
@@ -148,7 +154,7 @@ function PtDiets({ diets, patient }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 className="title">Minha <span>Dieta</span></h1>
-          <p className="sub">Planos alimentares elaborados pelo seu nutricionista</p>
+          <p className="sub">Plano alimentar elaborado pelo seu nutricionista</p>
         </div>
         {active && (
           <button className="btn sm ghost" onClick={() => window.print()}>
@@ -157,9 +163,8 @@ function PtDiets({ diets, patient }) {
         )}
       </div>
 
-      {/* Cards idênticos ao HistoryView do admin */}
       <div style={{ marginTop: 20 }}>
-        {diets.map(diet => {
+        {visibleDiets.map(diet => {
           const isOpen  = openId === diet.id
           const meals   = (diet.meals || []).filter(m => m.items?.length > 0)
           const hasSups = (diet.supplements || []).length > 0
@@ -167,7 +172,10 @@ function PtDiets({ diets, patient }) {
             <div key={diet.id}>
               <div className="panel" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 18, marginBottom: isOpen ? 0 : 12, borderBottomLeftRadius: isOpen ? 0 : 16, borderBottomRightRadius: isOpen ? 0 : 16 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{diet.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ fontWeight: 700, fontSize: 16 }}>{diet.name}</div>
+                    <span style={{ fontSize: 11, background: 'var(--green-soft)', color: 'var(--green-d)', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>Dieta atual</span>
+                  </div>
                   <div className="sub" style={{ fontSize: 13, marginTop: 3 }}>
                     {diet.createdAt ? new Date(diet.createdAt).toLocaleDateString('pt-BR') : ''}
                     {meals.length > 0 && <span> · {meals.length} refeição(ões)</span>}
@@ -184,7 +192,6 @@ function PtDiets({ diets, patient }) {
                 )}
               </div>
 
-              {/* Conteúdo expandido — usa exatamente as classes .meal do admin */}
               {isOpen && (
                 <div style={{ border: '1px solid var(--line)', borderTop: 'none', borderBottomLeftRadius: 16, borderBottomRightRadius: 16, padding: '18px 22px 16px', background: '#fff', marginBottom: 12 }}>
                   {meals.map(meal => (
@@ -224,13 +231,12 @@ function PtDiets({ diets, patient }) {
         })}
       </div>
 
-      {/* Área invisível — só aparece no print */}
       {active && <PrintDiet diet={active} patient={patient} />}
     </>
   )
 }
 
-/* ── Print layout — idêntico ao PDF de referência ───────────── */
+/* ── Print layout ────────────────────────────────────────────── */
 function PrintDiet({ diet, patient }) {
   const meals = (diet.meals || []).filter(m => m.items?.length > 0)
   return (
@@ -449,7 +455,6 @@ function PtMessages({ patient, messages, onAdd }) {
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}>Histórico ({messages.length})</div>
           {messages.map(m => (
             <div key={m.id} className="panel" style={{ marginBottom: 14 }}>
-              {/* Cabeçalho da mensagem */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div className="avatar" style={{ width: 30, height: 30, flexShrink: 0 }}>
@@ -469,13 +474,9 @@ function PtMessages({ patient, messages, onAdd }) {
                     </span>
                 }
               </div>
-
-              {/* Texto da pergunta */}
               <div style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--ink)', marginBottom: m.reply ? 14 : 0 }}>
                 {m.content}
               </div>
-
-              {/* Resposta do nutricionista */}
               {m.reply && (
                 <div style={{ background: 'var(--green-soft)', border: '1px solid #cde8d8', borderRadius: 12, padding: '12px 16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -568,7 +569,32 @@ function PtVideo({ patient, reqs, onAdd }) {
   )
 }
 
-/* ══ AVALIAÇÕES ════════════════════════════════════════════════ */
+/* ══ AVALIAÇÕES — com gráficos de evolução ═════════════════════ */
+function PtMiniChart({ points, color, suffix = '' }) {
+  if (!points || points.length === 0) return null
+  if (points.length === 1) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 70 }}>
+      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 32, fontWeight: 700, color }}>{points[0].y}{suffix}</div>
+    </div>
+  )
+  const w = 300, ht = 80, pad = 14
+  const ys = points.map(p => p.y)
+  const min = Math.min(...ys), max = Math.max(...ys), range = max - min || 1
+  const stepX = (w - 2 * pad) / (points.length - 1)
+  const coords = points.map((p, i) => [pad + i * stepX, ht - pad - ((p.y - min) / range) * (ht - 2 * pad)])
+  const path = coords.map((c, i) => (i ? 'L' : 'M') + c[0].toFixed(1) + ' ' + c[1].toFixed(1)).join(' ')
+  return (
+    <svg viewBox={`0 0 ${w} ${ht}`} style={{ width: '100%', height: 80 }}>
+      <path d={path} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      {coords.map((c, i) => <circle key={i} cx={c[0]} cy={c[1]} r="3.5" fill="#fff" stroke={color} strokeWidth="2" />)}
+      <text x={pad} y={12} fontSize="10" fill="#5d6f66">{points[0].y}{suffix}</text>
+      <text x={w - pad} y={12} fontSize="10" fill={color} textAnchor="end" fontWeight="700">{points[points.length - 1].y}{suffix}</text>
+    </svg>
+  )
+}
+
+function r1pt(n) { return Math.round((n || 0) * 10) / 10 }
+
 function PtAssessments({ assessments }) {
   if (!assessments.length) return (
     <div className="empty">
@@ -578,36 +604,82 @@ function PtAssessments({ assessments }) {
     </div>
   )
 
+  const sorted = [...assessments].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+
+  // Pontos para os gráficos
+  const bfPoints  = sorted.map(a => ({ y: r1pt(a.results?.bf  ?? (+a.bioFat || 0)) }))
+  const lmPoints  = sorted.map(a => {
+    const weight = +a.weight || 0
+    const bf = a.results?.bf ?? (+a.bioFat || 0)
+    const lm = a.results?.leanMass ?? (weight - weight * bf / 100)
+    return { y: r1pt(lm) }
+  })
+
+  const last = sorted[sorted.length - 1]
+  const lastBf = last ? (last.results?.bf ?? (+last.bioFat || 0)) : 0
+  const lastWeight = last ? +last.weight || 0 : 0
+  const lastLm = last ? (last.results?.leanMass ?? (lastWeight - lastWeight * lastBf / 100)) : 0
+
+  const bfColor = lastBf > 25 ? '#e5484d' : lastBf > 18 ? '#f1932c' : '#1f9d63'
+
   return (
     <>
       <h1 className="title">Minhas <span>Avaliações</span></h1>
-      <p className="sub">Histórico de avaliações físicas</p>
-      <div style={{ marginTop: 20 }}>
-        {assessments.map(a => {
+      <p className="sub">Histórico de avaliações físicas e evolução corporal</p>
+
+      {/* Gráficos de evolução */}
+      {sorted.length > 1 && (
+        <div className="chartwrap" style={{ marginTop: 20 }}>
+          <div className="chartcard">
+            <div className="ct"><Percent size={15} style={{ color: '#e5484d' }} /> % Gordura</div>
+            <PtMiniChart points={bfPoints} color="#e5484d" suffix="%" />
+          </div>
+          <div className="chartcard">
+            <div className="ct"><Scale size={15} style={{ color: '#1f9d63' }} /> Massa Magra (kg)</div>
+            <PtMiniChart points={lmPoints} color="#1f9d63" suffix=" kg" />
+          </div>
+        </div>
+      )}
+
+      {/* Cards individuais */}
+      <div style={{ marginTop: sorted.length > 1 ? 0 : 20 }}>
+        {[...sorted].reverse().map((a, idx) => {
           const h   = (+a.height || 0) / 100
           const imc = h > 0 ? (+a.weight / (h * h)).toFixed(1) : null
           const imcColor = !imc ? 'var(--ink)' : +imc < 18.5 ? '#2d7ff9' : +imc < 25 ? 'var(--green)' : +imc < 30 ? '#f1932c' : '#e5484d'
+          const bf = a.results?.bf ?? (+a.bioFat || 0)
+          const lm = a.results?.leanMass ?? (lastWeight - lastWeight * bf / 100)
+          const bfCol = bf > 32 ? '#e5484d' : bf > 25 ? '#f1932c' : '#1f9d63'
           return (
             <div key={a.id} className="panel" style={{ marginBottom: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <h2 style={{ margin: 0, fontSize: 17 }}>Avaliação de {a.date || '—'}</h2>
-                <span style={{ fontSize: 11.5, background: 'var(--green-soft)', color: 'var(--green-d)', padding: '3px 10px', borderRadius: 999, fontWeight: 700 }}>
-                  <Activity size={12} style={{ verticalAlign: '-1px' }} /> Registrada
-                </span>
+                <h2 style={{ margin: 0, fontSize: 17 }}>
+                  Avaliação de {a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                </h2>
+                {idx === 0 && (
+                  <span style={{ fontSize: 11.5, background: 'var(--green-soft)', color: 'var(--green-d)', padding: '3px 10px', borderRadius: 999, fontWeight: 700 }}>
+                    Mais recente
+                  </span>
+                )}
               </div>
               <div className="resgrid">
                 {[
-                  { l: 'Peso',    v: a.weight ? `${a.weight}` : '—', u: 'kg' },
-                  { l: 'Altura',  v: a.height ? `${a.height}` : '—', u: 'cm' },
-                  { l: 'IMC',     v: imc || '—', u: '',  color: imcColor },
-                  { l: '% Gordura', v: a.bf ? `${(+a.bf).toFixed(1)}` : '—', u: '%' },
+                  { l: 'Peso',       v: a.weight ? `${a.weight}` : '—', u: 'kg', color: 'var(--ink)' },
+                  { l: 'Altura',     v: a.height ? `${a.height}` : '—', u: 'cm', color: 'var(--ink)' },
+                  { l: '% Gordura',  v: bf ? r1pt(bf).toFixed(1) : '—', u: '%',  color: bfCol },
+                  { l: 'Massa Magra', v: lm ? r1pt(lm).toFixed(1) : '—', u: ' kg', color: '#1f9d63' },
                 ].map(b => (
                   <div key={b.l} className="rescard">
                     <div className="rl">{b.l}</div>
-                    <div className="rv" style={{ color: b.color || 'var(--ink)' }}>{b.v}<span style={{ fontSize: 14 }}>{b.u}</span></div>
+                    <div className="rv" style={{ color: b.color }}>{b.v}<span style={{ fontSize: 14 }}>{b.u}</span></div>
                   </div>
                 ))}
               </div>
+              {imc && (
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 4 }}>
+                  IMC: <b style={{ color: imcColor }}>{imc}</b>
+                </div>
+              )}
             </div>
           )
         })}
@@ -616,11 +688,11 @@ function PtAssessments({ assessments }) {
   )
 }
 
-/* ══ EXAMES ════════════════════════════════════════════════════ */
-function PtExams({ exams }) {
-  const [openId, setOpenId] = useState(null)
+/* ══ EXAMES — agrupados por marcador com evolução ══════════════ */
+function PtExams({ exams, patient }) {
+  const [openGroup, setOpenGroup] = useState(null)
 
-  if (!exams.length) return (
+  if (!exams || !exams.length) return (
     <div className="empty">
       <FlaskConical size={44} style={{ opacity: .25, marginBottom: 12 }} />
       <div style={{ fontFamily: "'Fraunces',serif", fontSize: 18, marginBottom: 6 }}>Nenhum exame</div>
@@ -628,41 +700,93 @@ function PtExams({ exams }) {
     </div>
   )
 
+  // Agrupamento por nome do exame
+  const groups = {}
+  for (const e of exams) {
+    const key = e.name || 'Sem nome'
+    if (!groups[key]) groups[key] = { name: key, unit: e.unit || '', ref: e.ref || '', note: e.note || '', entries: [] }
+    groups[key].entries.push(e)
+  }
+  for (const g of Object.values(groups)) {
+    g.entries.sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+  }
+  const groupList = Object.values(groups).sort((a, b) => a.name.localeCompare(b.name))
+
   return (
     <>
       <h1 className="title">Meus <span>Exames</span></h1>
-      <p className="sub">Resultados de exames laboratoriais</p>
+      <p className="sub">Resultados e evolução dos seus exames laboratoriais</p>
       <div style={{ marginTop: 20 }}>
-        {exams.map(exam => {
-          const isOpen = openId === exam.id
+        {groupList.map(g => {
+          const isOpen = openGroup === g.name
+          const last = g.entries[g.entries.length - 1]
+          const statusColor = last?.status === 'Normal' ? 'var(--green)' : last?.status === 'Alto' ? '#e5484d' : '#2d7ff9'
+          const statusBg    = last?.status === 'Normal' ? 'var(--green-soft)' : last?.status === 'Alto' ? '#fde8e9' : '#e1ecfe'
+          const chartPoints = g.entries.map(e => ({ y: r1pt(+e.result || 0) }))
+
           return (
-            <div key={exam.id} className="panel" style={{ marginBottom: 14, padding: 0, overflow: 'hidden' }}>
-              {/* Header do exame */}
+            <div key={g.name} className="panel" style={{ marginBottom: 14, padding: 0, overflow: 'hidden' }}>
+              {/* Cabeçalho do grupo */}
               <div
                 style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', cursor: 'pointer', background: isOpen ? 'var(--green-soft)' : '#fff', transition: '.15s' }}
-                onClick={() => setOpenId(isOpen ? null : exam.id)}
+                onClick={() => setOpenGroup(isOpen ? null : g.name)}
               >
-                <div style={{ width: 38, height: 38, borderRadius: 10, background: isOpen ? 'var(--green)' : 'var(--green-soft)', display: 'grid', placeItems: 'center', color: isOpen ? '#fff' : 'var(--green-d)', transition: '.15s' }}>
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: isOpen ? 'var(--green)' : 'var(--green-soft)', display: 'grid', placeItems: 'center', color: isOpen ? '#fff' : 'var(--green-d)', transition: '.15s', flexShrink: 0 }}>
                   <FlaskConical size={18} />
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700 }}>{exam.date || 'Exame'}</div>
-                  <div style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 2 }}>{(exam.results || []).length} marcadores</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700 }}>{g.name} {g.unit ? <span style={{ color: 'var(--ink-soft)', fontSize: 12, fontWeight: 400 }}>({g.unit})</span> : ''}</div>
+                  <div style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 2 }}>
+                    {g.entries.length} medição(ões)
+                    {last?.date && <span> · última: {new Date(last.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>}
+                  </div>
                 </div>
-                {isOpen ? <ChevronUp size={18} style={{ color: 'var(--ink-soft)' }} /> : <ChevronDown size={18} style={{ color: 'var(--ink-soft)' }} />}
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 20 }}>{last?.result} <small style={{ fontSize: 11, color: 'var(--ink-soft)' }}>{g.unit}</small></div>
+                  {last?.status && last.status !== '—' && (
+                    <span style={{ fontSize: 11.5, padding: '2px 8px', borderRadius: 999, fontWeight: 700, background: statusBg, color: statusColor }}>{last.status}</span>
+                  )}
+                </div>
+                {isOpen ? <ChevronUp size={18} style={{ color: 'var(--ink-soft)', flexShrink: 0 }} /> : <ChevronDown size={18} style={{ color: 'var(--ink-soft)', flexShrink: 0 }} />}
               </div>
 
-              {/* Linhas de resultado — usa .exrow exatamente como o admin */}
+              {/* Detalhes expandidos */}
               {isOpen && (
-                <div style={{ padding: '4px 20px 8px' }}>
-                  {(exam.results || []).map((r, i) => {
-                    const cor = r.status === 'Normal' ? 'var(--green)' : r.status === 'Alto' ? '#e5484d' : '#2d7ff9'
-                    const bg  = r.status === 'Normal' ? 'var(--green-soft)' : r.status === 'Alto' ? '#fde8e9' : '#e1ecfe'
+                <div style={{ padding: '16px 20px', borderTop: '1px solid var(--line)' }}>
+                  {/* Gráfico de evolução */}
+                  {g.entries.length > 1 && (
+                    <div className="chartcard" style={{ marginBottom: 16 }}>
+                      <div className="ct" style={{ marginBottom: 8 }}>
+                        <TrendingUp size={14} style={{ color: 'var(--green)' }} /> Evolução — {g.name}
+                        {g.ref && <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--ink-soft)', fontWeight: 400 }}>ref: {g.ref} {g.unit}</span>}
+                      </div>
+                      <PtMiniChart points={chartPoints} color={statusColor} suffix={g.unit ? ` ${g.unit}` : ''} />
+                    </div>
+                  )}
+
+                  {g.note && (
+                    <div className="infobox" style={{ marginBottom: 14 }}>{g.note}</div>
+                  )}
+
+                  {/* Histórico de medições */}
+                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Histórico</div>
+                  {[...g.entries].reverse().map((e, i) => {
+                    const eColor = e.status === 'Normal' ? 'var(--green)' : e.status === 'Alto' ? '#e5484d' : '#2d7ff9'
+                    const eBg    = e.status === 'Normal' ? 'var(--green-soft)' : e.status === 'Alto' ? '#fde8e9' : '#e1ecfe'
                     return (
-                      <div key={i} className="exrow">
-                        <div style={{ flex: 1, fontWeight: 500 }}>{r.name} {r.unit ? <span style={{ color: 'var(--ink-soft)', fontSize: 12 }}>({r.unit})</span> : ''}</div>
-                        <div style={{ fontWeight: 700, fontSize: 15, minWidth: 60, textAlign: 'right' }}>{r.result}</div>
-                        <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, fontWeight: 700, background: bg, color: cor, whiteSpace: 'nowrap' }}>{r.status}</span>
+                      <div key={e.id || i} className="exrow">
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 500 }}>
+                            {e.date ? new Date(e.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                          </div>
+                          {g.ref && <div className="iqt">ref: {g.ref} {g.unit}</div>}
+                        </div>
+                        <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 17 }}>
+                          {e.result} <small style={{ fontSize: 11, color: 'var(--ink-soft)' }}>{g.unit}</small>
+                        </div>
+                        {e.status && e.status !== '—' && (
+                          <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, fontWeight: 700, background: eBg, color: eColor, whiteSpace: 'nowrap' }}>{e.status}</span>
+                        )}
                       </div>
                     )
                   })}

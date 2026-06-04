@@ -250,4 +250,55 @@ export const NP_STYLE = `
 }
 
 @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+
+/* ── Responsivo para celular ──────────────────────────────────── */
+@media (max-width: 768px) {
+  .np .layout { flex-direction: column; }
+  .np .side {
+    width: 100%; height: auto; position: relative;
+    flex-direction: row; flex-wrap: nowrap;
+    overflow-x: auto; padding: 8px 10px;
+    gap: 2px; border-right: none;
+    border-bottom: 1px solid var(--line);
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .np .side::-webkit-scrollbar { display: none; }
+  .np .side .navlabel { display: none; }
+  .np .side .brand { min-width: 120px; padding-bottom: 0; border-right: 1px solid var(--line); margin-right: 6px; padding-right: 10px; align-items: center; }
+  .np .navitem { white-space: nowrap; width: auto; padding: 7px 10px; flex-shrink: 0; }
+  .np .side > div[style*="flex: 1"] { display: none; }
+  .np .main { padding: 16px 14px; }
+
+  .np .three { grid-template-columns: 1fr 1fr; }
+  .np .ingrid { grid-template-columns: 1fr 1fr; }
+  .np .two { grid-template-columns: 1fr; }
+  .np .resgrid { grid-template-columns: 1fr 1fr; }
+  .np .summary { grid-template-columns: 1fr 1fr; }
+  .np .summary.five { grid-template-columns: 1fr 1fr; }
+  .np .chartwrap { grid-template-columns: 1fr; }
+  .np .methods { grid-template-columns: 1fr; }
+  .np .grid-cards { grid-template-columns: 1fr; }
+  .np .pcard .acts { grid-template-columns: 1fr 1fr; }
+  .np .pcard .acts .wide { grid-column: span 2; }
+  .np .histrow { grid-template-columns: 1fr 80px 80px 36px; }
+  .np h1.title { font-size: 22px; }
+  .np .topbar { flex-wrap: wrap; gap: 10px; }
+  .np .modal { padding: 18px; }
+  .np .panel { padding: 16px; }
+  .np .macrotable { font-size: 12px; }
+  .np .macrotable th, .np .macrotable td { padding: 7px 6px; }
+}
+
+@media (max-width: 480px) {
+  .np .three { grid-template-columns: 1fr; }
+  .np .ingrid { grid-template-columns: 1fr; }
+  .np .resgrid { grid-template-columns: 1fr 1fr; }
+  .np .histrow { grid-template-columns: 1fr 70px 36px; }
+  .np .side { padding: 6px 8px; }
+  .np .navitem { font-size: 12px; padding: 6px 8px; gap: 6px; }
+  .np .brand b { font-size: 14px; }
+  .np .main { padding: 12px 10px; }
+  .np h1.title { font-size: 20px; }
+}
 `
