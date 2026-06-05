@@ -308,26 +308,40 @@ function PtAppointment({ patient }) {
             <p className="sub">Aguarde seu nutricionista definir a próxima data.</p>
           </div>
         )}
-        <div className="panel" style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 42, height: 42, borderRadius: 12, background: 'var(--green-soft)', display: 'grid', placeItems: 'center', color: 'var(--green-d)', flexShrink: 0 }}>
-            <Video size={20} />
+        <a
+          href="https://wa.me/5567996029305"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ textDecoration: 'none' }}
+        >
+          <div className="panel" style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', transition: '.15s', border: '1.5px solid #25d366' }}>
+            <div style={{ width: 42, height: 42, borderRadius: 12, background: '#e8fef1', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#25d366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.118 1.528 5.855L0 24l6.335-1.508A11.955 11.955 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.885 0-3.65-.492-5.18-1.355l-.371-.22-3.762.896.952-3.677-.242-.381A9.952 9.952 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, color: '#1a8a47' }}>Falar no WhatsApp</div>
+              <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>Para cancelar, reagendar ou tirar dúvidas rápidas.</div>
+            </div>
           </div>
-          <div>
-            <div style={{ fontWeight: 700 }}>Precisa de uma consulta online?</div>
-            <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>Acesse "Vídeo Chamada" no menu para solicitar.</div>
-          </div>
-        </div>
+        </a>
       </div>
     </>
   )
 }
 
 /* ══ FOTOS ═════════════════════════════════════════════════════ */
+const EVAL_SUBTYPES = [
+  'Frente', 'Lado Direito', 'Lado Esquerdo', 'Costas', 'Pose de Musculação', 'Outra'
+]
+
 function PtPhotos({ patient, photos, onAdd }) {
-  const [caption,  setCaption]  = useState('')
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState('')
-  const [preview,  setPreview]  = useState(null)
+  const [photoMode,  setPhotoMode]  = useState('progresso') // 'progresso' | 'avaliacao'
+  const [subType,    setSubType]    = useState('Frente')
+  const [caption,    setCaption]    = useState('')
+  const [obs,        setObs]        = useState('')
+  const [loading,    setLoading]    = useState(false)
+  const [error,      setError]      = useState('')
+  const [preview,    setPreview]    = useState(null)
   const fileRef = useRef()
 
   const pickFile = e => {
@@ -339,9 +353,19 @@ function PtPhotos({ patient, photos, onAdd }) {
     if (!preview) return
     setLoading(true); setError('')
     const nid = patient.nutritionist_id || patient.nutritionistId
-    const { data, error: err } = await db.uploadPatientPhoto(patient.id, nid, preview.file, caption)
-    if (err) setError('Erro ao enviar. Tente novamente.')
-    else { onAdd(data); setCaption(''); setPreview(null) }
+    let finalCaption = ''
+    if (photoMode === 'avaliacao') {
+      finalCaption = `[Avaliação - ${subType}]${obs.trim() ? ' ' + obs.trim() : ''}`
+    } else {
+      finalCaption = caption.trim()
+    }
+    const { data, error: err } = await db.uploadPatientPhoto(patient.id, nid, preview.file, finalCaption)
+    if (err) setError(`Erro ao enviar: ${err.message || 'Tente novamente.'}`)
+    else {
+      onAdd(data)
+      setCaption(''); setObs(''); setPreview(null)
+      setPhotoMode('progresso'); setSubType('Frente')
+    }
     setLoading(false)
     if (fileRef.current) fileRef.current.value = ''
   }
@@ -353,7 +377,54 @@ function PtPhotos({ patient, photos, onAdd }) {
 
       <div className="panel" style={{ marginTop: 20 }}>
         <h2>Enviar nova foto</h2>
-        <p className="ph">Compartilhe seu progresso ou um registro do seu dia alimentar.</p>
+
+        {/* Tipo de foto */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          {[
+            { id: 'progresso', label: 'Progresso / Alimentar' },
+            { id: 'avaliacao', label: 'Foto de Avaliação' },
+          ].map(m => (
+            <button
+              key={m.id}
+              onClick={() => setPhotoMode(m.id)}
+              style={{
+                padding: '6px 14px', borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none',
+                background: photoMode === m.id ? 'var(--green)' : 'var(--bg)',
+                color: photoMode === m.id ? '#fff' : 'var(--ink-soft)',
+              }}
+            >{m.label}</button>
+          ))}
+        </div>
+
+        {/* Sub-tipo para avaliação */}
+        {photoMode === 'avaliacao' && (
+          <div style={{ marginBottom: 14 }}>
+            <label className="lbl">Tipo de foto de avaliação</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+              {EVAL_SUBTYPES.map(s => (
+                <button
+                  key={s}
+                  onClick={() => setSubType(s)}
+                  style={{
+                    padding: '5px 12px', borderRadius: 999, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', border: '1.5px solid',
+                    borderColor: subType === s ? 'var(--green)' : 'var(--line)',
+                    background: subType === s ? 'var(--green-soft)' : '#fff',
+                    color: subType === s ? 'var(--green-d)' : 'var(--ink-soft)',
+                  }}
+                >{s}</button>
+              ))}
+            </div>
+            {subType === 'Outra' && (
+              <input
+                className="field"
+                style={{ marginTop: 8 }}
+                value={obs}
+                onChange={e => setObs(e.target.value)}
+                placeholder="Descreva o motivo da foto…"
+              />
+            )}
+          </div>
+        )}
 
         {error && <div className="infobox" style={{ background: '#fde8e9', borderColor: '#f3c5c6', color: '#9b1c1f' }}>{error}</div>}
 
@@ -367,17 +438,17 @@ function PtPhotos({ patient, photos, onAdd }) {
           <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <img src={preview.url} alt="preview" style={{ width: 130, height: 130, objectFit: 'cover', borderRadius: 12, border: '1px solid var(--line)', flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 200 }}>
-              <div className="modal" style={{ padding: 0, boxShadow: 'none', borderRadius: 0, maxHeight: 'none' }}>
-                <div className="row">
+              {photoMode === 'progresso' && (
+                <div className="row" style={{ marginBottom: 0 }}>
                   <label className="lbl">Descrição (opcional)</label>
                   <input className="field" value={caption} onChange={e => setCaption(e.target.value)} placeholder="Ex.: almoço, evolução semana 3…" />
                 </div>
-              </div>
+              )}
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                 <button className="btn sm" onClick={upload} disabled={loading}>
                   <Send size={14} /> {loading ? 'Enviando…' : 'Enviar'}
                 </button>
-                <button className="btn sm ghost" onClick={() => { setPreview(null); setCaption('') }}>Cancelar</button>
+                <button className="btn sm ghost" onClick={() => { setPreview(null); setCaption(''); setObs('') }}>Cancelar</button>
               </div>
             </div>
           </div>
@@ -619,6 +690,14 @@ function PtAssessments({ assessments }) {
     return { y: r1pt(lm) }
   })
 
+  const SKINFOLD_LABELS = {
+    peitoral: 'Peitoral', axilarMedia: 'Axilar Média', triceps: 'Tríceps',
+    subescapular: 'Subescapular', abdominal: 'Abdominal', supraIliaca: 'Supra-ilíaca', coxa: 'Coxa'
+  }
+  const skinfoldKeys = Object.keys(SKINFOLD_LABELS).filter(k =>
+    sorted.some(a => a.skinfolds?.[k] != null && +a.skinfolds[k] > 0)
+  )
+
   const last = sorted[sorted.length - 1]
   const lastBf = last ? (last.results?.bf ?? (+last.bioFat || 0)) : 0
   const lastWeight = last ? +last.weight || 0 : 0
@@ -633,25 +712,41 @@ function PtAssessments({ assessments }) {
 
       {/* Gráficos de evolução */}
       {sorted.length > 1 && (
-        <div className="chartwrap" style={{ marginTop: 20 }}>
-          <div className="chartcard">
-            <div className="ct"><Percent size={15} style={{ color: '#e5484d' }} /> % Gordura</div>
-            <PtMiniChart points={bfPoints} color="#e5484d" suffix="%" />
+        <>
+          <div className="chartwrap" style={{ marginTop: 20 }}>
+            <div className="chartcard">
+              <div className="ct"><Percent size={15} style={{ color: '#e5484d' }} /> % Gordura</div>
+              <PtMiniChart points={bfPoints} color="#e5484d" suffix="%" />
+            </div>
+            <div className="chartcard">
+              <div className="ct"><Scale size={15} style={{ color: '#1f9d63' }} /> Massa Magra (kg)</div>
+              <PtMiniChart points={lmPoints} color="#1f9d63" suffix=" kg" />
+            </div>
           </div>
-          <div className="chartcard">
-            <div className="ct"><Scale size={15} style={{ color: '#1f9d63' }} /> Massa Magra (kg)</div>
-            <PtMiniChart points={lmPoints} color="#1f9d63" suffix=" kg" />
-          </div>
-        </div>
+          {skinfoldKeys.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 10 }}>Evolução das Dobras Cutâneas (mm)</div>
+              <div className="chartwrap">
+                {skinfoldKeys.map(k => (
+                  <div key={k} className="chartcard">
+                    <div className="ct">{SKINFOLD_LABELS[k]}</div>
+                    <PtMiniChart
+                      points={sorted.map(a => ({ y: r1pt(+(a.skinfolds?.[k] || 0)) }))}
+                      color="#2d7ff9"
+                      suffix=" mm"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Cards individuais */}
       <div style={{ marginTop: sorted.length > 1 ? 0 : 20 }}>
         {[...sorted].reverse().map((a, idx) => {
-          const h   = (+a.height || 0) / 100
-          const imc = h > 0 ? (+a.weight / (h * h)).toFixed(1) : null
-          const imcColor = !imc ? 'var(--ink)' : +imc < 18.5 ? '#2d7ff9' : +imc < 25 ? 'var(--green)' : +imc < 30 ? '#f1932c' : '#e5484d'
-          const bf = a.results?.bf ?? (+a.bioFat || 0)
+const bf = a.results?.bf ?? (+a.bioFat || 0)
           const lm = a.results?.leanMass ?? (lastWeight - lastWeight * bf / 100)
           const bfCol = bf > 32 ? '#e5484d' : bf > 25 ? '#f1932c' : '#1f9d63'
           return (
@@ -679,11 +774,6 @@ function PtAssessments({ assessments }) {
                   </div>
                 ))}
               </div>
-              {imc && (
-                <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 4 }}>
-                  IMC: <b style={{ color: imcColor }}>{imc}</b>
-                </div>
-              )}
             </div>
           )
         })}
@@ -763,10 +853,6 @@ function PtExams({ exams, patient }) {
                       </div>
                       <PtMiniChart points={chartPoints} color={statusColor} suffix={g.unit ? ` ${g.unit}` : ''} />
                     </div>
-                  )}
-
-                  {g.note && (
-                    <div className="infobox" style={{ marginBottom: 14 }}>{g.note}</div>
                   )}
 
                   {/* Histórico de medições */}
