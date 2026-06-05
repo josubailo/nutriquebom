@@ -879,9 +879,7 @@ export default function App() {
           <div className="navlabel">Menu Principal</div>
           <button className={"navitem" + (view === "patients" ? " active" : "")} onClick={() => setView("patients")}><Users size={18} /> Meus Pacientes</button>
           <button className={"navitem" + (view === "agenda" ? " active" : "")} onClick={() => setView("agenda")}><CalendarDays size={18} /> Minha Agenda</button>
-          <button className={"navitem" + (view === "assessment" ? " active" : "")} onClick={() => setView("assessment")}><Activity size={18} /> Avaliação Física</button>
           <button className={"navitem" + (view === "myfoods" ? " active" : "")} onClick={() => setView("myfoods")}><Apple size={18} /> Meus Alimentos</button>
-          <button className={"navitem" + (view === "exams" ? " active" : "")} onClick={() => setView("exams")}><FlaskConical size={18} /> Exames Lab.</button>
           <button className={"navitem" + (view === "profile" ? " active" : "")} onClick={() => setView("profile")}><UserCircle size={18} /> Perfil</button>
 
           {activePatient && (
@@ -894,6 +892,7 @@ export default function App() {
               <button className={"navitem" + (view === "assessment" ? " active" : "")} onClick={() => setView("assessment")}><Activity size={18} /> Avaliação Física</button>
               <button className={"navitem" + (view === "exams" ? " active" : "")} onClick={() => setView("exams")}><FlaskConical size={18} /> Exames Lab.</button>
               <button className={"navitem" + (view === "anamnese" ? " active" : "")} onClick={() => setView("anamnese")}><FileText size={18} /> Anamnese</button>
+              <button className="navitem" style={{ color: '#e5484d', marginTop: 4 }} onClick={() => { setActivePatient(null); setView("patients"); }}><LogOut size={18} /> Sair do Paciente</button>
             </>
           )}
           <div style={{ flex: 1 }} />
@@ -1731,20 +1730,75 @@ function AssessmentWizard({ patient, onSave, initialData }) {
   );
 }
 
-function MiniChart({ points, color, suffix }) {
-  if (points.length === 0) return <div className="empty" style={{ padding: 20 }}>Sem dados</div>;
-  const w = 320, ht = 90, pad = 14;
-  const ys = points.map((p) => p.y);
-  const min = Math.min(...ys), max = Math.max(...ys), range = max - min || 1;
-  const stepX = points.length > 1 ? (w - 2 * pad) / (points.length - 1) : 0;
-  const coords = points.map((p, i) => [pad + i * stepX, ht - pad - ((p.y - min) / range) * (ht - 2 * pad)]);
-  const path = coords.map((c, i) => (i ? "L" : "M") + c[0].toFixed(1) + " " + c[1].toFixed(1)).join(" ");
+function StackedBarChart({ rows }) {
+  const W = 560, H = 210, PL = 40, PR = 16, PT = 32, PB = 52;
+  const innerW = W - PL - PR, innerH = H - PT - PB;
+  if (!rows.length) return null;
+  const maxVal = Math.max(...rows.map(r => +r.a.weight || 0)) * 1.18;
+  const n = rows.length;
+  const barW = Math.min(48, (innerW / n) * 0.55);
+  const toY = v => H - PB - (v / maxVal) * innerH;
+  const toX = i => PL + (innerW / n) * i + (innerW / n) / 2;
+  const stepVal = maxVal > 60 ? 20 : 10;
+  const ticks = [];
+  for (let v = 0; v <= maxVal + stepVal; v += stepVal) if (v <= maxVal * 1.05) ticks.push(v);
+
   return (
-    <svg viewBox={`0 0 ${w} ${ht}`} style={{ width: "100%", height: 90 }}>
-      <path d={path} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      {coords.map((c, i) => <circle key={i} cx={c[0]} cy={c[1]} r="3.5" fill="#fff" stroke={color} strokeWidth="2" />)}
-      <text x={pad} y={12} fontSize="10" fill="#5d6f66">{points[0].y}{suffix}</text>
-      <text x={w - pad} y={12} fontSize="10" fill={color} textAnchor="end" fontWeight="700">{points[points.length - 1].y}{suffix}</text>
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
+      {/* Grid lines */}
+      {ticks.map(t => (
+        <g key={t}>
+          <line x1={PL} y1={toY(t).toFixed(1)} x2={W - PR} y2={toY(t).toFixed(1)} stroke="#e8ede8" strokeWidth="1" />
+          <text x={PL - 5} y={+toY(t).toFixed(1) + 4} fontSize="9" fill="#8a9a90" textAnchor="end">{Math.round(t)}</text>
+        </g>
+      ))}
+      {/* Axis */}
+      <line x1={PL} y1={toY(0)} x2={PL} y2={PT} stroke="#c8d8c8" strokeWidth="1" />
+      <line x1={PL} y1={toY(0)} x2={W - PR} y2={toY(0)} stroke="#c8d8c8" strokeWidth="1" />
+
+      {/* Bars */}
+      {rows.map((x, i) => {
+        const fat  = +(x.r.fatMass  || 0);
+        const lean = +(x.r.leanMass || 0);
+        const total = +x.a.weight || (fat + lean);
+        const cx = toX(i);
+        const bx = cx - barW / 2;
+        const yBase  = toY(0);
+        const yFatT  = toY(fat);
+        const yTotal = toY(total);
+        return (
+          <g key={x.a.id}>
+            {fat > 0 && <rect x={bx} y={yFatT} width={barW} height={yBase - yFatT} fill="#e8c84a" opacity="0.9" rx="3" ry="3" />}
+            {lean > 0 && <rect x={bx} y={yTotal} width={barW} height={Math.max(0, yFatT - yTotal)} fill="#e07878" opacity="0.85" rx="3" ry="3" />}
+          </g>
+        );
+      })}
+
+      {/* Line — Massa corporal total */}
+      {rows.length > 1 && (
+        <polyline
+          points={rows.map((x, i) => `${toX(i).toFixed(1)},${toY(+x.a.weight || 0).toFixed(1)}`).join(' ')}
+          fill="none" stroke="#555" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+        />
+      )}
+      {rows.map((x, i) => (
+        <circle key={i} cx={toX(i)} cy={toY(+x.a.weight || 0)} r="4.5" fill="#555" />
+      ))}
+
+      {/* Date labels */}
+      {rows.map((x, i) => (
+        <text key={i} x={toX(i)} y={H - 6} fontSize="9" fill="#5d6f66" textAnchor="middle">
+          {x.a.date ? new Date(x.a.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'}
+        </text>
+      ))}
+
+      {/* Legend */}
+      <rect x={PL} y={6} width={9} height={9} fill="#555" rx="2" />
+      <text x={PL + 12} y={14} fontSize="9" fill="#5d6f66">Massa corporal total (Kg)</text>
+      <rect x={PL + 148} y={6} width={9} height={9} fill="#e8c84a" rx="2" />
+      <text x={PL + 160} y={14} fontSize="9" fill="#5d6f66">Massa gordurosa (Kg)</text>
+      <rect x={PL + 286} y={6} width={9} height={9} fill="#e07878" rx="2" />
+      <text x={PL + 298} y={14} fontSize="9" fill="#5d6f66">Massa livre de gordura (Kg)</text>
     </svg>
   );
 }
@@ -1753,42 +1807,91 @@ function AssessmentHistory({ assessments, onEdit, onNew }) {
   const sorted = [...assessments].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   if (sorted.length === 0)
     return <div className="empty"><Activity size={40} style={{ opacity: .4 }} /><p>Nenhuma avaliação registrada ainda.</p><button className="btn" onClick={onNew}><Plus size={16} /> Nova Avaliação</button></div>;
+
   const rows = sorted.map((a) => ({ a, r: assessResults(a) }));
-  const wPoints  = rows.map((x) => ({ y: r1(+x.a.weight) }));
-  const bfPoints = rows.map((x) => ({ y: r1(x.r.bf) }));
-  const lmPoints = rows.map((x) => ({ y: r1(x.r.leanMass) }));
-  const delta = (cur, prev) => { if (prev == null) return null; const d = cur - prev; const up = d > 0; return <span className="delta" style={{ color: Math.abs(d) < 0.05 ? "var(--ink-soft)" : up ? "#e5484d" : "#1f9d63" }}>{up ? "▲" : "▼"} {Math.abs(d).toFixed(1)}</span>; };
+
+  const fmtDelta = (cur, prev) => {
+    if (prev == null || cur == null) return null;
+    const d = +(cur - prev).toFixed(1);
+    if (Math.abs(d) < 0.05) return null;
+    const up = d > 0;
+    return <span style={{ fontSize: 11, color: up ? '#e5484d' : '#1f9d63', marginLeft: 3, whiteSpace: 'nowrap' }}>{up ? '↑' : '↓'} ({up ? '+' : ''}{d})</span>;
+  };
+
+  const skinfoldSum = (a) => {
+    if (!a.skinfolds) return null;
+    const vals = Object.values(a.skinfolds).map(Number).filter(v => v > 0);
+    return vals.length ? vals.reduce((s, v) => s + v, 0) : null;
+  };
+
+  const METRICS = [
+    { label: 'Peso atual (Kg)',              get: (a, r) => +a.weight || null },
+    { label: 'Altura atual (cm)',            get: (a, r) => +a.height || null },
+    { label: '% Gordura',                   get: (a, r) => r.bf || null },
+    { label: 'Massa de Gordura (Kg)',        get: (a, r) => r.fatMass || null },
+    { label: 'Massa Livre de Gordura (Kg)', get: (a, r) => r.leanMass || null },
+    { label: 'Somatório de Dobras (mm)',     get: (a, r) => skinfoldSum(a) },
+  ];
+
+  const cellStyle = { padding: '9px 12px', fontSize: 13, borderBottom: '1px solid #eef2ee', textAlign: 'center', whiteSpace: 'nowrap' };
+  const headStyle = { ...cellStyle, fontWeight: 700, fontSize: 12, background: '#f5f9f5', color: '#5d6f66' };
 
   return (
     <>
-      <div className="chartwrap" style={{ marginTop: 18 }}>
-        <div className="chartcard"><div className="ct"><Scale size={15} /> Peso (kg)</div><MiniChart points={wPoints} color="#1f9d63" suffix="" /></div>
-        <div className="chartcard"><div className="ct"><Percent size={15} /> % Gordura</div><MiniChart points={bfPoints} color="#e5484d" suffix="%" /></div>
+      {/* Gráfico de barras empilhadas */}
+      <div className="panel" style={{ marginTop: 18, padding: '16px 16px 10px' }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: 'var(--ink)' }}>Gráfico de evolução da composição corporal</div>
+        <StackedBarChart rows={rows} />
       </div>
-      {lmPoints.some(p => p.y > 0) && (
-        <div className="chartwrap">
-          <div className="chartcard"><div className="ct"><TrendingUp size={15} /> Massa Magra (kg)</div><MiniChart points={lmPoints} color="#2d7ff9" suffix="" /></div>
-          <div />
+
+      {/* Tabela comparativa */}
+      <div className="panel" style={{ marginTop: 14, padding: 0, overflow: 'hidden' }}>
+        <div style={{ fontWeight: 700, fontSize: 14, padding: '14px 16px 10px', borderBottom: '1px solid #eef2ee' }}>Comparativo de avaliações</div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>
+            <thead>
+              <tr>
+                <th style={{ ...headStyle, textAlign: 'left', minWidth: 180 }}>Parâmetro</th>
+                {rows.map((x, i) => (
+                  <th key={i} style={headStyle}>
+                    {x.a.date ? new Date(x.a.date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                  </th>
+                ))}
+                <th style={{ ...headStyle, width: 36 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {METRICS.map(m => (
+                <tr key={m.label} style={{ '&:hover': { background: '#f9fbf9' } }}>
+                  <td style={{ ...cellStyle, textAlign: 'left', color: 'var(--ink-soft)', fontSize: 12.5 }}>{m.label}</td>
+                  {rows.map((x, i) => {
+                    const val = m.get(x.a, x.r);
+                    const prev = i > 0 ? m.get(rows[i - 1].a, rows[i - 1].r) : null;
+                    return (
+                      <td key={i} style={{ ...cellStyle, fontWeight: i === rows.length - 1 ? 700 : 500 }}>
+                        {val != null ? (
+                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                            {r1(val)}
+                            {fmtDelta(val, prev)}
+                          </span>
+                        ) : '—'}
+                      </td>
+                    );
+                  })}
+                  <td style={cellStyle}></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
-      <div className="panel">
-        <h2 style={{ marginBottom: 12 }}>Comparativo de avaliações</h2>
-        <div className="histrow"><div className="hh">Data</div><div className="hh">Peso</div><div className="hh">% Gord.</div><div className="hh">M. Magra</div><div className="hh">IMC</div><div></div></div>
-        {[...rows].reverse().map((x, idx, arr) => {
-          const prev = arr[idx + 1];
-          return (
-            <div className="histrow" key={x.a.id}>
-              <div>{x.a.date ? new Date(x.a.date + 'T12:00:00').toLocaleDateString("pt-BR") : '—'}</div>
-              <div>{r1(+x.a.weight)} {delta(+x.a.weight, prev ? +prev.a.weight : null)}</div>
-              <div>{r1(x.r.bf)}% {delta(x.r.bf, prev ? prev.r.bf : null)}</div>
-              <div>{r1(x.r.leanMass)} kg</div>
-              <div>{r1(x.r.imc)}</div>
-              <div>
-                <button className="iconbtn" title="Editar avaliação" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-soft)" }} onClick={() => onEdit(x.a.id)}><Pencil size={15} /></button>
-              </div>
-            </div>
-          );
-        })}
+        {/* Linha de edição */}
+        <div style={{ padding: '10px 16px', borderTop: '1px solid #eef2ee', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {rows.map((x, i) => (
+            <button key={i} className="btn sm ghost" style={{ fontSize: 12 }} onClick={() => onEdit(x.a.id)}>
+              <Pencil size={13} /> {x.a.date ? new Date(x.a.date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+            </button>
+          ))}
+        </div>
       </div>
     </>
   );
