@@ -119,7 +119,7 @@ export default function PatientPortal({ patientData }) {
         <main className="main">
           {tab === 'diets'       && <PtDiets diets={diets} patient={patient} />}
           {tab === 'appointment' && <PtAppointment patient={patient} />}
-          {tab === 'photos'      && <PtPhotos patient={patient} photos={photos} onAdd={p => setPhotos(prev => [p, ...prev])} />}
+          {tab === 'photos'      && <PtPhotos patient={patient} photos={photos} onAdd={p => setPhotos(prev => [p, ...prev])} onRemove={id => setPhotos(prev => prev.filter(x => x.id !== id))} />}
           {tab === 'messages'    && <PtMessages patient={patient} messages={messages} onAdd={m => setMessages(prev => [m, ...prev])} />}
           {tab === 'video'       && <PtVideo patient={patient} reqs={videoReqs} onAdd={r => setVideoReqs(prev => [r, ...prev])} />}
           {tab === 'assessments' && <PtAssessments assessments={assessments} />}
@@ -334,7 +334,7 @@ const EVAL_SUBTYPES = [
   'Frente', 'Lado Direito', 'Lado Esquerdo', 'Costas', 'Pose de Musculação', 'Outra'
 ]
 
-function PtPhotos({ patient, photos, onAdd }) {
+function PtPhotos({ patient, photos, onAdd, onRemove }) {
   const [photoMode,  setPhotoMode]  = useState('progresso') // 'progresso' | 'avaliacao'
   const [subType,    setSubType]    = useState('Frente')
   const [caption,    setCaption]    = useState('')
@@ -465,19 +465,13 @@ function PtPhotos({ patient, photos, onAdd }) {
       ) : (
         <>
           <div style={{ fontWeight: 700, fontSize: 15, margin: '24px 0 12px' }}>Galeria ({photos.length})</div>
-          <div className="grid-cards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px,1fr))' }}>
-            {photos.map(p => (
-              <div key={p.id} className="pcard" style={{ padding: 0, overflow: 'hidden' }}>
-                <img src={p.public_url} alt={p.caption || 'foto'} style={{ width: '100%', height: 160, objectFit: 'cover' }} />
-                <div style={{ padding: '10px 14px' }}>
-                  {p.caption && <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 3 }}>{p.caption}</div>}
-                  <div style={{ color: 'var(--ink-soft)', fontSize: 12 }}>
-                    {new Date(p.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <PtPhotoGallery
+            photos={photos}
+            onDelete={async (p) => {
+              const { error } = await db.deletePatientPhoto(p.id, p.storage_path)
+              if (!error) onRemove(p.id)
+            }}
+          />
         </>
       )}
     </>
@@ -879,6 +873,132 @@ function PtExams({ exams, patient }) {
           )
         })}
       </div>
+    </>
+  )
+}
+
+/* ══ GALERIA DE FOTOS DO PACIENTE ══════════════════════════════ */
+const PT_EVAL_ORDER = ['Frente','Lado Direito','Lado Esquerdo','Costas','Pose de Musculação','Outra']
+
+function ptParseCaption(caption) {
+  const m = (caption || '').match(/^\[Avaliação - (.+?)\](.*)$/)
+  if (m) return { group: m[1].trim(), label: m[2].trim() || '' }
+  return { group: 'Progresso / Alimentar', label: caption || '' }
+}
+
+function ptTimeDiff(d1, d2) {
+  const days = Math.round((new Date(d2) - new Date(d1)) / 86400000)
+  if (days < 1) return null
+  if (days < 30) return `${days} dia${days > 1 ? 's' : ''} depois`
+  const months = Math.round(days / 30.4)
+  return `${months} ${months === 1 ? 'mês' : 'meses'} depois`
+}
+
+function PtPhotoGallery({ photos, onDelete }) {
+  const [lightbox, setLightbox] = useState(null)
+  const [confirm,  setConfirm]  = useState(null)
+
+  const groups = {}
+  const sorted = [...photos].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  for (const p of sorted) {
+    const { group } = ptParseCaption(p.caption)
+    if (!groups[group]) groups[group] = []
+    groups[group].push(p)
+  }
+  const groupKeys = [
+    ...PT_EVAL_ORDER.filter(k => groups[k]),
+    ...Object.keys(groups).filter(k => !PT_EVAL_ORDER.includes(k)),
+  ]
+
+  const handleDelete = async (p) => {
+    if (confirm === p.id) {
+      setConfirm(null)
+      await onDelete(p)
+    } else {
+      setConfirm(p.id)
+      setTimeout(() => setConfirm(c => c === p.id ? null : c), 3000)
+    }
+  }
+
+  return (
+    <>
+      {lightbox && (
+        <div
+          onClick={() => setLightbox(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.88)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <img src={lightbox.public_url} alt="" style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 12, objectFit: 'contain' }} />
+          <a
+            href={lightbox.public_url}
+            download
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            style={{ position: 'absolute', top: 20, right: 70, background: '#1f9d63', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 18px', fontWeight: 700, fontSize: 14, cursor: 'pointer', textDecoration: 'none' }}
+          >⬇ Baixar</a>
+          <button
+            onClick={() => setLightbox(null)}
+            style={{ position: 'absolute', top: 20, right: 20, background: 'rgba(255,255,255,.15)', color: '#fff', border: 'none', borderRadius: 8, width: 40, height: 40, fontSize: 20, cursor: 'pointer' }}
+          >✕</button>
+        </div>
+      )}
+
+      {groupKeys.map(gk => {
+        const gPhotos = groups[gk]
+        return (
+          <div key={gk} style={{ marginBottom: 28 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>{gk}</div>
+              <span style={{ fontSize: 12, color: 'var(--ink-soft)', background: 'var(--bg)', borderRadius: 999, padding: '2px 10px' }}>
+                {gPhotos.length} foto{gPhotos.length > 1 ? 's' : ''}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 6 }}>
+              {gPhotos.map((p, i) => {
+                const { label } = ptParseCaption(p.caption)
+                const diff = i > 0 ? ptTimeDiff(gPhotos[i - 1].created_at, p.created_at) : null
+                return (
+                  <React.Fragment key={p.id}>
+                    {diff && (
+                      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                        <div style={{ textAlign: 'center', color: 'var(--ink-soft)', fontSize: 11, fontWeight: 600, maxWidth: 58 }}>
+                          <div style={{ fontSize: 16 }}>→</div>
+                          {diff}
+                        </div>
+                      </div>
+                    )}
+                    <div style={{ flexShrink: 0, width: 160, background: '#fff', border: '1px solid var(--line)', borderRadius: 14, overflow: 'hidden' }}>
+                      <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setLightbox(p)}>
+                        <img src={p.public_url} alt={p.caption || 'foto'} style={{ width: '100%', height: 180, objectFit: 'cover', display: 'block' }} />
+                        <div style={{ position: 'absolute', bottom: 6, right: 6, background: 'rgba(0,0,0,.45)', borderRadius: 6, padding: '3px 7px', fontSize: 11, color: '#fff' }}>🔍</div>
+                      </div>
+                      <div style={{ padding: '8px 10px' }}>
+                        <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginBottom: 4 }}>
+                          {new Date(p.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </div>
+                        {label && <div style={{ fontSize: 12, color: 'var(--ink)', marginBottom: 6 }}>{label}</div>}
+                        <div style={{ display: 'flex', gap: 5 }}>
+                          <a
+                            href={p.public_url}
+                            download
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ flex: 1, background: 'var(--green-soft)', color: 'var(--green-d)', border: 'none', borderRadius: 7, padding: '4px 0', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', textAlign: 'center', textDecoration: 'none', display: 'block' }}
+                          >⬇ Baixar</a>
+                          <button
+                            onClick={() => handleDelete(p)}
+                            style={{ background: confirm === p.id ? '#e5484d' : '#fde8e9', color: confirm === p.id ? '#fff' : '#9b1c1f', border: 'none', borderRadius: 7, padding: '4px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                          >{confirm === p.id ? 'Confirmar' : '🗑'}</button>
+                        </div>
+                      </div>
+                    </div>
+                  </React.Fragment>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
     </>
   )
 }

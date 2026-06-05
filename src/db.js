@@ -294,6 +294,14 @@ export async function uploadPatientPhoto(patientId, nutritionistId, file, captio
   return { data, error }
 }
 
+export async function deletePatientPhoto(photoId, storagePath) {
+  if (storagePath) {
+    await supabase.storage.from('patient-photos').remove([storagePath])
+  }
+  const { error } = await supabase.from('patient_photos').delete().eq('id', photoId)
+  return { error }
+}
+
 export async function loadPatientPhotos(nutritionistId, patientId) {
   const q = supabase.from('patient_photos').select('*').eq('nutritionist_id', nutritionistId)
   if (patientId) q.eq('patient_id', patientId)
