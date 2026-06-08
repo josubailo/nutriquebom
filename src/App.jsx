@@ -724,15 +724,10 @@ export default function App() {
 
     // Se informou email + senha, cria a conta de acesso do paciente
     if (patientFields.email && password) {
-      if (!supabaseAdmin) {
-        onError?.('Configure a VITE_SUPABASE_SERVICE_KEY no arquivo .env para criar contas de pacientes.');
-        return;
-      }
-      const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+      const { data: authData, error: authErr } = await supabase.auth.signUp({
         email: patientFields.email,
         password,
-        email_confirm: true,
-        user_metadata: { name: patientFields.name, role: 'patient' },
+        options: { data: { name: patientFields.name, role: 'patient' } },
       });
       if (authErr) {
         onError?.(authErr.message === 'User already registered'
@@ -740,7 +735,7 @@ export default function App() {
           : authErr.message);
         return;
       }
-      userId = authData.user.id;
+      userId = authData.user?.id || null;
     }
 
     const novo = { id: uid(), createdAt: Date.now(), ...patientFields, userId };
