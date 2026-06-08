@@ -6,7 +6,7 @@ import {
   Camera, Ruler, Scale, TrendingUp, Percent, ImageIcon, Apple, FileText, LogOut,
   Video, HelpCircle, Send, Lock, Clock
 } from "lucide-react";
-import { supabase, supabaseAdmin } from "./supabase";
+import { supabase } from "./supabase";
 import * as db from "./db";
 import Login from "./Login";
 import PatientPortal from "./PatientPortal";
