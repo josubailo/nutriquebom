@@ -723,8 +723,15 @@ export default function App() {
     let userId = null;
 
     // Se informou email + senha, cria a conta de acesso do paciente
+    // Usa cliente isolado para NÃO trocar a sessão do nutricionista logado
     if (patientFields.email && password) {
-      const { data: authData, error: authErr } = await supabase.auth.signUp({
+      const { createClient } = await import('@supabase/supabase-js');
+      const tmpClient = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY,
+        { auth: { persistSession: false, autoRefreshToken: false } }
+      );
+      const { data: authData, error: authErr } = await tmpClient.auth.signUp({
         email: patientFields.email,
         password,
         options: { data: { name: patientFields.name, role: 'patient' } },
