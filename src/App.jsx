@@ -4,13 +4,15 @@ import {
   Plus, Search, X, Copy, ChevronDown, ChevronUp, Pencil, Trash2,
   ArrowLeft, FileDown, Save, ClipboardList, Pill, Repeat, Mail, Phone, Cake,
   Camera, Ruler, Scale, TrendingUp, Percent, ImageIcon, Apple, FileText, LogOut,
-  Video, HelpCircle, Send, Lock, Clock, GripVertical, Minimize2, Maximize2, BarChart3
+  Video, HelpCircle, Send, Lock, Clock, GripVertical, Minimize2, Maximize2, BarChart3, Type
 } from "lucide-react";
 import { supabase } from "./supabase";
 import * as db from "./db";
 import Login from "./Login";
 import PatientPortal from "./PatientPortal";
 import { NP_STYLE } from "./npStyles";
+import { r0, r1, assessResults, imcClass, bfClass } from "./assessCalc";
+import { StackedBarChart, AssessComparisonTable } from "./assessShared";
 //import "./supabase"; APENAS TESTE DO BD
 
 /* ============================================================
@@ -492,47 +494,6 @@ const EQ_FIELDS = {
   faulkner: () => ["triceps", "subescapular", "supraIliaca", "abdominal"],
 };
 
-const siri = (d) => 495 / d - 450;
-function bodyFatManual(eq, sex, age, sf) {
-  const g = (k) => +sf[k] || 0;
-  if (eq === "jp3") {
-    let sum, d;
-    if (sex === "M") { sum = g("peitoral") + g("abdominal") + g("coxa"); d = 1.10938 - 0.0008267 * sum + 0.0000016 * sum * sum - 0.0002574 * age; }
-    else { sum = g("triceps") + g("supraIliaca") + g("coxa"); d = 1.0994921 - 0.0009929 * sum + 0.0000023 * sum * sum - 0.0001392 * age; }
-    return siri(d);
-  }
-  if (eq === "jp7") {
-    const sum = ["peitoral", "axilarMedia", "triceps", "subescapular", "abdominal", "supraIliaca", "coxa"].reduce((a, k) => a + g(k), 0);
-    const d = sex === "M"
-      ? 1.112 - 0.00043499 * sum + 0.00000055 * sum * sum - 0.00028826 * age
-      : 1.097 - 0.00046971 * sum + 0.00000056 * sum * sum - 0.00012828 * age;
-    return siri(d);
-  }
-  if (eq === "faulkner") return (g("triceps") + g("subescapular") + g("supraIliaca") + g("abdominal")) * 0.153 + 5.783;
-  return 0;
-}
-function assessResults(a) {
-  const h = (+a.height || 0) / 100;
-  const imc = h > 0 ? +a.weight / (h * h) : 0;
-  let bf = 0;
-  if (a.method === "manual") bf = bodyFatManual(a.equation, a.sex, +a.age, a.skinfolds || {});
-  else if (a.method === "bioimpedancia") bf = +a.bioFat || 0;
-  else bf = +a.iaFat || 0;
-  bf = Math.max(0, bf || 0);
-  const fatMass = (+a.weight) * bf / 100;
-  const leanMass = (+a.weight) - fatMass;
-  const rcq = (+a.perimeters?.cintura && +a.perimeters?.quadril) ? +a.perimeters.cintura / +a.perimeters.quadril : 0;
-  return { imc, bf, fatMass, leanMass, rcq };
-}
-const imcClass = (imc) => imc < 18.5 ? ["Abaixo do peso", "#2d7ff9"] : imc < 25 ? ["Eutrófico", "#1f9d63"] : imc < 30 ? ["Sobrepeso", "#f1932c"] : ["Obesidade", "#e5484d"];
-function bfClass(bf, sex) {
-  const t = sex === "M" ? [6, 14, 18, 25] : [14, 21, 25, 32];
-  if (bf < t[0]) return ["Essencial", "#2d7ff9"];
-  if (bf < t[1]) return ["Atlético", "#1f9d63"];
-  if (bf < t[2]) return ["Bom", "#1f9d63"];
-  if (bf < t[3]) return ["Aceitável", "#f1932c"];
-  return ["Elevado", "#e5484d"];
-}
 const newAssessment = (patient) => ({
   id: uid(), patientId: patient?.id, date: new Date().toISOString().slice(0, 10),
   age: ageFrom(patient?.birth) || 30, weight: 70, height: 170,
@@ -557,8 +518,6 @@ const joinOr = (arr) => {
   if (arr.length === 1) return arr[0];
   return `${arr.slice(0, -1).join(", ")} ou ${arr[arr.length - 1]}`;
 };
-const r0 = (n) => Math.round(n || 0);
-const r1 = (n) => Math.round((n || 0) * 10) / 10;
 const ageFrom = (birth) => {
   if (!birth) return "";
   const d = new Date(birth); if (isNaN(d)) return "";
@@ -1209,6 +1168,16 @@ function SaveDietModal({ onSave, onClose }) {
 function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
   const [foodModal, setFoodModal] = useState(null); // {mealId}
   const [saveModal, setSaveModal] = useState(false);
+  const [renameItem, setRenameItem] = useState(null); // {mealId, itemId, val}
+  const startRenameItem = (mealId, it) => setRenameItem({ mealId, itemId: it.id, val: cleanName(it.name) });
+  const confirmRenameItem = () => {
+    if (!renameItem) return;
+    const val = renameItem.val.trim();
+    if (val) {
+      setDiet((d) => ({ ...d, meals: d.meals.map((mm2) => mm2.id !== renameItem.mealId ? mm2 : { ...mm2, items: mm2.items.map((x) => x.id === renameItem.itemId ? { ...x, name: val } : x) }) }));
+    }
+    setRenameItem(null);
+  };
   const tgt = useMemo(() => computeTargets(diet), [diet]);
   const dayTotals = useMemo(() => sumMacros(diet.meals.flatMap((m) => m.items)), [diet]);
   const microTotals = useMemo(() => sumMicros(diet.meals.flatMap((m) => m.items)), [diet]);
@@ -1342,8 +1311,24 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
             <div className="meal-body">
               {meal.items.map((it) => { const m = itemMacros(it); return (
                 <div className="item" key={it.id}>
-                  <div style={{ flex: 1, minWidth: 0 }}><div className="inm">{cleanName(it.name)}</div><div className="iqt">{cleanName(it.label)}</div></div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {renameItem && renameItem.mealId === meal.id && renameItem.itemId === it.id ? (
+                      <input
+                        className="field"
+                        style={{ padding: "4px 8px", fontSize: 14, height: 30 }}
+                        autoFocus
+                        value={renameItem.val}
+                        onChange={(e) => setRenameItem((r) => ({ ...r, val: e.target.value }))}
+                        onBlur={confirmRenameItem}
+                        onKeyDown={(e) => { if (e.key === "Enter") confirmRenameItem(); else if (e.key === "Escape") setRenameItem(null); }}
+                      />
+                    ) : (
+                      <div className="inm">{cleanName(it.name)}</div>
+                    )}
+                    <div className="iqt">{cleanName(it.label)}</div>
+                  </div>
                   <div className="imac">{r0(m.kcal)} kcal · P{r0(m.p)} C{r0(m.c)} G{r0(m.f)}</div>
+                  <button className="iconbtn" title="Renomear na dieta" onClick={() => startRenameItem(meal.id, it)}><Type size={15} /></button>
                   <button className="iconbtn" title="Editar quantidade" onClick={() => setFoodModal({ mealId: meal.id, editItem: it })}><Pencil size={15} /></button>
                   <button className="iconbtn" title="Excluir alimento" onClick={() => setDiet((d) => ({ ...d, meals: d.meals.map((mm2) => mm2.id === meal.id ? { ...mm2, items: mm2.items.filter((x) => x.id !== it.id) } : mm2) }))}><Trash2 size={15} /></button>
                 </div>
@@ -1861,131 +1846,12 @@ function AssessmentWizard({ patient, onSave, initialData }) {
   );
 }
 
-function StackedBarChart({ rows }) {
-  const W = 560, H = 210, PL = 40, PR = 16, PT = 32, PB = 52;
-  const innerW = W - PL - PR, innerH = H - PT - PB;
-  if (!rows.length) return null;
-  const maxVal = Math.max(...rows.map(r => +r.a.weight || 0)) * 1.18;
-  const n = rows.length;
-  const barW = Math.min(48, (innerW / n) * 0.55);
-  const toY = v => H - PB - (v / maxVal) * innerH;
-  const toX = i => PL + (innerW / n) * i + (innerW / n) / 2;
-  const stepVal = maxVal > 60 ? 20 : 10;
-  const ticks = [];
-  for (let v = 0; v <= maxVal + stepVal; v += stepVal) if (v <= maxVal * 1.05) ticks.push(v);
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
-      {/* Grid lines */}
-      {ticks.map(t => (
-        <g key={t}>
-          <line x1={PL} y1={toY(t).toFixed(1)} x2={W - PR} y2={toY(t).toFixed(1)} stroke="#e8ede8" strokeWidth="1" />
-          <text x={PL - 5} y={+toY(t).toFixed(1) + 4} fontSize="9" fill="#8a9a90" textAnchor="end">{Math.round(t)}</text>
-        </g>
-      ))}
-      {/* Axis */}
-      <line x1={PL} y1={toY(0)} x2={PL} y2={PT} stroke="#c8d8c8" strokeWidth="1" />
-      <line x1={PL} y1={toY(0)} x2={W - PR} y2={toY(0)} stroke="#c8d8c8" strokeWidth="1" />
-
-      {/* Bars */}
-      {rows.map((x, i) => {
-        const fat  = +(x.r.fatMass  || 0);
-        const lean = +(x.r.leanMass || 0);
-        const total = +x.a.weight || (fat + lean);
-        const cx = toX(i);
-        const bx = cx - barW / 2;
-        const yBase  = toY(0);
-        const yFatT  = toY(fat);
-        const yTotal = toY(total);
-        return (
-          <g key={x.a.id}>
-            {fat > 0 && <rect x={bx} y={yFatT} width={barW} height={yBase - yFatT} fill="#e8c84a" opacity="0.9" rx="3" ry="3" />}
-            {lean > 0 && <rect x={bx} y={yTotal} width={barW} height={Math.max(0, yFatT - yTotal)} fill="#e07878" opacity="0.85" rx="3" ry="3" />}
-          </g>
-        );
-      })}
-
-      {/* Line — Massa corporal total */}
-      {rows.length > 1 && (
-        <polyline
-          points={rows.map((x, i) => `${toX(i).toFixed(1)},${toY(+x.a.weight || 0).toFixed(1)}`).join(' ')}
-          fill="none" stroke="#555" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
-        />
-      )}
-      {rows.map((x, i) => (
-        <circle key={i} cx={toX(i)} cy={toY(+x.a.weight || 0)} r="4.5" fill="#555" />
-      ))}
-
-      {/* Date labels */}
-      {rows.map((x, i) => (
-        <text key={i} x={toX(i)} y={H - 6} fontSize="9" fill="#5d6f66" textAnchor="middle">
-          {x.a.date ? new Date(x.a.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'}
-        </text>
-      ))}
-
-      {/* Legend */}
-      <rect x={PL} y={6} width={9} height={9} fill="#555" rx="2" />
-      <text x={PL + 12} y={14} fontSize="9" fill="#5d6f66">Massa corporal total (Kg)</text>
-      <rect x={PL + 148} y={6} width={9} height={9} fill="#e8c84a" rx="2" />
-      <text x={PL + 160} y={14} fontSize="9" fill="#5d6f66">Massa gordurosa (Kg)</text>
-      <rect x={PL + 286} y={6} width={9} height={9} fill="#e07878" rx="2" />
-      <text x={PL + 298} y={14} fontSize="9" fill="#5d6f66">Massa livre de gordura (Kg)</text>
-    </svg>
-  );
-}
-
 function AssessmentHistory({ assessments, onEdit, onNew }) {
   const sorted = [...assessments].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   if (sorted.length === 0)
     return <div className="empty"><Activity size={40} style={{ opacity: .4 }} /><p>Nenhuma avaliação registrada ainda.</p><button className="btn" onClick={onNew}><Plus size={16} /> Nova Avaliação</button></div>;
 
   const rows = sorted.map((a) => ({ a, r: assessResults(a) }));
-
-  const fmtDelta = (cur, prev) => {
-    if (prev == null || cur == null) return null;
-    const d = +(cur - prev).toFixed(1);
-    if (Math.abs(d) < 0.05) return null;
-    const up = d > 0;
-    return <span style={{ fontSize: 11, color: up ? '#e5484d' : '#1f9d63', marginLeft: 3, whiteSpace: 'nowrap' }}>{up ? '↑' : '↓'} ({up ? '+' : ''}{d})</span>;
-  };
-
-  const skinfoldSum = (a) => {
-    if (!a.skinfolds) return null;
-    const vals = Object.values(a.skinfolds).map(Number).filter(v => v > 0);
-    return vals.length ? vals.reduce((s, v) => s + v, 0) : null;
-  };
-
-  const METRICS = [
-    { label: 'Peso atual (Kg)',              get: (a, r) => +a.weight || null },
-    { label: 'Altura atual (cm)',            get: (a, r) => +a.height || null },
-    { label: 'IMC (Kg/m²)',                 get: (a, r) => r.imc || null },
-    { label: '% Gordura',                   get: (a, r) => r.bf || null },
-    { label: 'Massa de Gordura (Kg)',        get: (a, r) => r.fatMass || null },
-    { label: 'Massa Livre de Gordura (Kg)', get: (a, r) => r.leanMass || null },
-    { label: 'Somatório de Dobras (mm)',     get: (a, r) => skinfoldSum(a) },
-    { section: 'Dobras Cutâneas (mm)' },
-    { label: 'Peitoral (mm)',        get: (a) => +a.skinfolds?.peitoral || null },
-    { label: 'Axilar Média (mm)',    get: (a) => +a.skinfolds?.axilarMedia || null },
-    { label: 'Tríceps (mm)',         get: (a) => +a.skinfolds?.triceps || null },
-    { label: 'Subescapular (mm)',    get: (a) => +a.skinfolds?.subescapular || null },
-    { label: 'Abdominal (mm)',       get: (a) => +a.skinfolds?.abdominal || null },
-    { label: 'Supra-ilíaca (mm)',    get: (a) => +a.skinfolds?.supraIliaca || null },
-    { label: 'Coxa (mm)',            get: (a) => +a.skinfolds?.coxa || null },
-    { section: 'Circunferências (cm)' },
-    { label: 'Ombro (cm)',           get: (a) => +a.perimeters?.ombro || null },
-    { label: 'Peitoral/Tórax (cm)', get: (a) => +a.perimeters?.peitoral || null },
-    { label: 'Cintura (cm)',         get: (a) => +a.perimeters?.cintura || null },
-    { label: 'Abdômen (cm)',         get: (a) => +a.perimeters?.abdomen || null },
-    { label: 'Quadril (cm)',         get: (a) => +a.perimeters?.quadril || null },
-    { label: 'Braço relaxado (cm)',  get: (a) => +a.perimeters?.braco || null },
-    { label: 'Braço contraído (cm)',get: (a) => +a.perimeters?.bracoContr || null },
-    { label: 'Antebraço (cm)',       get: (a) => +a.perimeters?.antebraco || null },
-    { label: 'Coxa (cm)',            get: (a) => +a.perimeters?.coxa || null },
-    { label: 'Panturrilha (cm)',     get: (a) => +a.perimeters?.panturrilha || null },
-  ];
-
-  const cellStyle = { padding: '9px 12px', fontSize: 13, borderBottom: '1px solid #eef2ee', textAlign: 'center', whiteSpace: 'nowrap' };
-  const headStyle = { ...cellStyle, fontWeight: 700, fontSize: 12, background: '#f5f9f5', color: '#5d6f66' };
 
   return (
     <>
@@ -1996,66 +1862,7 @@ function AssessmentHistory({ assessments, onEdit, onNew }) {
       </div>
 
       {/* Tabela comparativa */}
-      <div className="panel" style={{ marginTop: 14, padding: 0, overflow: 'hidden' }}>
-        <div style={{ fontWeight: 700, fontSize: 14, padding: '14px 16px 10px', borderBottom: '1px solid #eef2ee' }}>Comparativo de avaliações</div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>
-            <thead>
-              <tr>
-                <th style={{ ...headStyle, textAlign: 'left', minWidth: 180 }}>Parâmetro</th>
-                {rows.map((x, i) => (
-                  <th key={i} style={headStyle}>
-                    {x.a.date ? new Date(x.a.date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
-                  </th>
-                ))}
-                <th style={{ ...headStyle, width: 36 }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {METRICS.filter(m => {
-                if (m.section) return true;
-                return rows.some(x => m.get(x.a, x.r) != null);
-              }).map((m, mi) => {
-                if (m.section) return (
-                  <tr key={'sec-' + mi}>
-                    <td colSpan={rows.length + 2} style={{ ...cellStyle, background: '#f0f7f3', fontWeight: 700, fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--green-d)', textAlign: 'left', paddingTop: 10 }}>
-                      {m.section}
-                    </td>
-                  </tr>
-                );
-                return (
-                  <tr key={m.label}>
-                    <td style={{ ...cellStyle, textAlign: 'left', color: 'var(--ink-soft)', fontSize: 12.5 }}>{m.label}</td>
-                    {rows.map((x, i) => {
-                      const val = m.get(x.a, x.r);
-                      const prev = i > 0 ? m.get(rows[i - 1].a, rows[i - 1].r) : null;
-                      return (
-                        <td key={i} style={{ ...cellStyle, fontWeight: i === rows.length - 1 ? 700 : 500 }}>
-                          {val != null ? (
-                            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-                              {r1(val)}
-                              {fmtDelta(val, prev)}
-                            </span>
-                          ) : '—'}
-                        </td>
-                      );
-                    })}
-                    <td style={cellStyle}></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        {/* Linha de edição */}
-        <div style={{ padding: '10px 16px', borderTop: '1px solid #eef2ee', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {rows.map((x, i) => (
-            <button key={i} className="btn sm ghost" style={{ fontSize: 12 }} onClick={() => onEdit(x.a.id)}>
-              <Pencil size={13} /> {x.a.date ? new Date(x.a.date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
-            </button>
-          ))}
-        </div>
-      </div>
+      <AssessComparisonTable rows={rows} editable onEdit={onEdit} />
     </>
   );
 }

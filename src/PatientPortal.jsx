@@ -4,10 +4,12 @@ import { supabase } from './supabase'
 import {
   Utensils, Activity, FlaskConical, LogOut, ChevronDown, ChevronUp,
   CalendarDays, Video, HelpCircle, Camera, Send, Check, Clock, ImageIcon,
-  FileDown, UserCircle, Pencil, Scale, TrendingUp, Percent, Pill, Repeat, ClipboardList
+  FileDown, UserCircle, Pencil, TrendingUp, Pill, Repeat, ClipboardList
 } from 'lucide-react'
 import * as db from './db'
 import { NP_STYLE } from './npStyles'
+import { assessResults } from './assessCalc'
+import { StackedBarChart, AssessComparisonTable } from './assessShared'
 
 // remove espaços duplicados/extras digitados no nome do alimento
 const cleanName = (n) => (n || '').replace(/\s+/g, ' ').trim()
@@ -714,74 +716,17 @@ function PtAssessments({ assessments }) {
   )
 
   const sorted = [...assessments].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-
-  // Pontos para os gráficos
-  const bfPoints  = sorted.map(a => ({ y: r1pt(a.results?.bf  ?? (+a.bioFat || 0)) }))
-  const lmPoints  = sorted.map(a => {
-    const weight = +a.weight || 0
-    const bf = a.results?.bf ?? (+a.bioFat || 0)
-    const lm = a.results?.leanMass ?? (weight - weight * bf / 100)
-    return { y: r1pt(lm) }
-  })
-
-  const SKINFOLD_LABELS = {
-    peitoral: 'Peitoral', axilarMedia: 'Axilar Média', triceps: 'Tríceps',
-    subescapular: 'Subescapular', abdominal: 'Abdominal', supraIliaca: 'Supra-ilíaca', coxa: 'Coxa'
-  }
-  const skinfoldKeys = Object.keys(SKINFOLD_LABELS).filter(k =>
-    sorted.some(a => a.skinfolds?.[k] != null && +a.skinfolds[k] > 0)
-  )
-
-  const last = sorted[sorted.length - 1]
-  const lastBf = last ? (last.results?.bf ?? (+last.bioFat || 0)) : 0
-  const lastWeight = last ? +last.weight || 0 : 0
-  const lastLm = last ? (last.results?.leanMass ?? (lastWeight - lastWeight * lastBf / 100)) : 0
-
-  const bfColor = lastBf > 25 ? '#e5484d' : lastBf > 18 ? '#f1932c' : '#1f9d63'
+  const rows = sorted.map((a) => ({ a, r: assessResults(a) }))
 
   return (
     <>
       <h1 className="title">Minhas <span>Avaliações</span></h1>
       <p className="sub">Histórico de avaliações físicas e evolução corporal</p>
 
-      {/* Gráficos de evolução */}
-      {sorted.length > 1 && (
-        <>
-          <div className="chartwrap" style={{ marginTop: 20 }}>
-            <div className="chartcard">
-              <div className="ct"><Percent size={15} style={{ color: '#e5484d' }} /> % Gordura</div>
-              <PtMiniChart points={bfPoints} color="#e5484d" suffix="%" />
-            </div>
-            <div className="chartcard">
-              <div className="ct"><Scale size={15} style={{ color: '#1f9d63' }} /> Massa Magra (kg)</div>
-              <PtMiniChart points={lmPoints} color="#1f9d63" suffix=" kg" />
-            </div>
-          </div>
-          {skinfoldKeys.length > 0 && (
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 10 }}>Evolução das Dobras Cutâneas (mm)</div>
-              <div className="chartwrap">
-                {skinfoldKeys.map(k => (
-                  <div key={k} className="chartcard">
-                    <div className="ct">{SKINFOLD_LABELS[k]}</div>
-                    <PtMiniChart
-                      points={sorted.map(a => ({ y: r1pt(+(a.skinfolds?.[k] || 0)) }))}
-                      color="#2d7ff9"
-                      suffix=" mm"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
       {/* Cards individuais */}
-      <div style={{ marginTop: sorted.length > 1 ? 0 : 20 }}>
+      <div style={{ marginTop: 20 }}>
         {[...sorted].reverse().map((a, idx) => {
-const bf = a.results?.bf ?? (+a.bioFat || 0)
-          const lm = a.results?.leanMass ?? (lastWeight - lastWeight * bf / 100)
+          const { bf, leanMass: lm } = assessResults(a)
           const bfCol = bf > 32 ? '#e5484d' : bf > 25 ? '#f1932c' : '#1f9d63'
           return (
             <div key={a.id} className="panel" style={{ marginBottom: 14 }}>
@@ -812,6 +757,17 @@ const bf = a.results?.bf ?? (+a.bioFat || 0)
           )
         })}
       </div>
+
+      {/* Tabela comparativa */}
+      <AssessComparisonTable rows={rows} />
+
+      {/* Gráfico de evolução da composição corporal */}
+      {sorted.length > 1 && (
+        <div className="panel" style={{ marginTop: 14, padding: '16px 16px 10px' }}>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: 'var(--ink)' }}>Gráfico de evolução da composição corporal</div>
+          <StackedBarChart rows={rows} />
+        </div>
+      )}
     </>
   )
 }
