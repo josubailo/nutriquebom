@@ -174,6 +174,21 @@ export const NP_STYLE = `
 .np .item .inm { font-weight:500; }
 .np .item .iqt { color:var(--ink-soft); font-size:12.5px; }
 .np .item .imac { margin-left:auto; font-size:12px; color:var(--ink-soft); }
+.np .item .iconbtn { color:var(--ink-soft); background:none; border:none; cursor:pointer; padding:4px; border-radius:6px; flex-shrink:0; }
+.np .item .iconbtn:hover { background:var(--bg); color:var(--ink); }
+
+/* resumo nutricional flutuante */
+.np .floatsum { position:fixed; right:20px; bottom:90px; width:240px; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:0 8px 30px rgba(22,36,29,.18); z-index:60; max-width:calc(100vw - 24px); }
+.np .floatsum-head { display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--green-soft); color:var(--green-d); border-radius:14px 14px 0 0; font-weight:700; font-size:12.5px; cursor:grab; user-select:none; touch-action:none; }
+.np .floatsum-head span { flex:1; }
+.np .floatsum-head button { background:none; border:none; cursor:pointer; color:var(--green-d); display:flex; padding:2px; border-radius:6px; }
+.np .floatsum-head button:hover { background:rgba(0,0,0,.06); }
+.np .floatsum-body { padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+.np .floatsum-row { display:flex; justify-content:space-between; align-items:baseline; font-size:12px; gap:8px; }
+.np .floatsum-lab { font-weight:700; color:var(--ink); }
+.np .floatsum-val { color:var(--ink-soft); white-space:nowrap; }
+.np .floatsum .track { margin:3px 0 0; }
+.np .floatsum-toggle { position:fixed; right:20px; bottom:90px; width:44px; height:44px; border-radius:999px; border:1px solid var(--line); background:#fff; color:var(--green-d); box-shadow:0 8px 24px rgba(22,36,29,.18); display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:60; }
 .np .food-search { position:relative; margin-top:8px; }
 .np .food-results { border:1px solid var(--line); border-radius:12px; margin-top:6px; max-height:230px; overflow:auto; }
 .np .food-results .fr { display:flex; justify-content:space-between; padding:10px 13px; cursor:pointer; border-bottom:1px solid var(--line); }

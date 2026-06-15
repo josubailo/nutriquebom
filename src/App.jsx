@@ -4,7 +4,7 @@ import {
   Plus, Search, X, Copy, ChevronDown, ChevronUp, Pencil, Trash2,
   ArrowLeft, FileDown, Save, ClipboardList, Pill, Repeat, Mail, Phone, Cake,
   Camera, Ruler, Scale, TrendingUp, Percent, ImageIcon, Apple, FileText, LogOut,
-  Video, HelpCircle, Send, Lock, Clock
+  Video, HelpCircle, Send, Lock, Clock, GripVertical, Minimize2, Maximize2, BarChart3
 } from "lucide-react";
 import { supabase } from "./supabase";
 import * as db from "./db";
@@ -549,6 +549,14 @@ const ASSESS_STEPS = {
 
 /* ---------- Helpers ---------- */
 const uid = () => Math.random().toString(36).slice(2, 9);
+// remove espaços duplicados/extras digitados no nome do alimento
+const cleanName = (n) => (n || "").replace(/\s+/g, " ").trim();
+// junta uma lista de substitutos em texto legível: "A ou B" / "A, B ou C"
+const joinOr = (arr) => {
+  if (!arr || arr.length === 0) return "";
+  if (arr.length === 1) return arr[0];
+  return `${arr.slice(0, -1).join(", ")} ou ${arr[arr.length - 1]}`;
+};
 const r0 = (n) => Math.round(n || 0);
 const r1 = (n) => Math.round((n || 0) * 10) / 10;
 const ageFrom = (birth) => {
@@ -605,7 +613,7 @@ const newDiet = (patient) => ({
   formula: "mifflin", activity: 1.55, objective: "manutencao", adjust: 500,
   proteinPerKg: 2.0, fatPerKg: 0.8,
   meals: defaultMeals(),
-  subs: {}, supplements: [],
+  subs: {}, supplements: [], note: "",
 });
 
 /* ---------- NumInput: campo numérico que aceita vírgula e ponto ---------- */
@@ -1217,6 +1225,14 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
 
   const pct = (val, t) => (t > 0 ? Math.min(100, (val / t) * 100) : 0);
 
+  const summaryItems = [
+    { lab: "Calorias", val: dayTotals.kcal, t: tgt.kcal, u: "", col: "var(--kcal)" },
+    { lab: "Proteínas", val: dayTotals.p, t: tgt.p, u: "g", col: "var(--p)" },
+    { lab: "Carboidratos", val: dayTotals.c, t: tgt.c, u: "g", col: "var(--c)" },
+    { lab: "Gorduras", val: dayTotals.f, t: tgt.f, u: "g", col: "var(--f)" },
+    { lab: "Fibras", val: dayTotals.fib, t: 14 * tgt.vet / 1000, u: "g", col: "var(--fib)" },
+  ];
+
   return (
     <>
       <div className="topbar">
@@ -1295,13 +1311,7 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
       <div className="panel">
         <h2 style={{ marginBottom: 16 }}>📊 Resumo Nutricional</h2>
         <div className="summary five">
-          {[
-            { lab: "Calorias", val: dayTotals.kcal, t: tgt.kcal, u: "", col: "var(--kcal)" },
-            { lab: "Proteínas", val: dayTotals.p, t: tgt.p, u: "g", col: "var(--p)" },
-            { lab: "Carboidratos", val: dayTotals.c, t: tgt.c, u: "g", col: "var(--c)" },
-            { lab: "Gorduras", val: dayTotals.f, t: tgt.f, u: "g", col: "var(--f)" },
-            { lab: "Fibras", val: dayTotals.fib, t: 14 * tgt.vet / 1000, u: "g", col: "var(--fib)" },
-          ].map((s) => (
+          {summaryItems.map((s) => (
             <div className="it" key={s.lab}>
               <div className="lab">{s.lab}</div>
               <div className="big" style={{ color: s.col }}>{r0(s.val)}{s.u}</div>
@@ -1332,9 +1342,10 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
             <div className="meal-body">
               {meal.items.map((it) => { const m = itemMacros(it); return (
                 <div className="item" key={it.id}>
-                  <div><div className="inm">{it.name}</div><div className="iqt">{it.label}</div></div>
+                  <div style={{ flex: 1, minWidth: 0 }}><div className="inm">{cleanName(it.name)}</div><div className="iqt">{cleanName(it.label)}</div></div>
                   <div className="imac">{r0(m.kcal)} kcal · P{r0(m.p)} C{r0(m.c)} G{r0(m.f)}</div>
-                  <button className="iconbtn" onClick={() => setDiet((d) => ({ ...d, meals: d.meals.map((mm2) => mm2.id === meal.id ? { ...mm2, items: mm2.items.filter((x) => x.id !== it.id) } : mm2) }))}><Trash2 size={15} /></button>
+                  <button className="iconbtn" title="Editar quantidade" onClick={() => setFoodModal({ mealId: meal.id, editItem: it })}><Pencil size={15} /></button>
+                  <button className="iconbtn" title="Excluir alimento" onClick={() => setDiet((d) => ({ ...d, meals: d.meals.map((mm2) => mm2.id === meal.id ? { ...mm2, items: mm2.items.filter((x) => x.id !== it.id) } : mm2) }))}><Trash2 size={15} /></button>
                 </div>
               ); })}
               <button className="btn sm ghost" style={{ marginTop: 10 }} onClick={() => setFoodModal({ mealId: meal.id })}><Plus size={15} /> Adicionar alimento</button>
@@ -1401,7 +1412,35 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
           ))}
       </div>
 
-      {foodModal && <FoodModal meal={diet.meals.find((m) => m.id === foodModal.mealId)} foods={foods} onClose={() => setFoodModal(null)} onAdd={(item) => { setDiet((d) => ({ ...d, meals: d.meals.map((m) => m.id === foodModal.mealId ? { ...m, items: [...m.items, item] } : m) })); setFoodModal(null); }} />}
+      {/* Observação */}
+      <div className="panel">
+        <h2><ClipboardList size={18} style={{ verticalAlign: "-3px" }} /> Observação</h2>
+        <p className="ph">Deixe um recado para o paciente. Ele aparecerá no final da dieta, após a suplementação.</p>
+        <textarea className="field" rows={4} value={diet.note || ""} onChange={(e) => up("note", e.target.value)} placeholder="Ex.: Beber bastante água ao longo do dia, evitar refrigerantes…" />
+      </div>
+
+      {foodModal && (
+        <FoodModal
+          meal={diet.meals.find((m) => m.id === foodModal.mealId)}
+          foods={foods}
+          editItem={foodModal.editItem}
+          onClose={() => setFoodModal(null)}
+          onConfirm={(item) => {
+            setDiet((d) => ({
+              ...d,
+              meals: d.meals.map((m) => m.id !== foodModal.mealId ? m : {
+                ...m,
+                items: foodModal.editItem
+                  ? m.items.map((x) => (x.id === item.id ? item : x))
+                  : [...m.items, item],
+              }),
+            }));
+            setFoodModal(null);
+          }}
+        />
+      )}
+
+      <FloatingSummary items={summaryItems} />
 
       {/* Botão salvar fixo no final */}
       <div style={{ position: 'sticky', bottom: 24, display: 'flex', justifyContent: 'flex-end', marginTop: 8, marginBottom: 24, pointerEvents: 'none' }}>
@@ -1449,35 +1488,55 @@ function SubAdder({ onAdd }) {
   );
 }
 
-function FoodModal({ meal, foods, onClose, onAdd }) {
+function FoodModal({ meal, foods, editItem, onClose, onConfirm }) {
+  const initialSel = editItem
+    ? (foods.find((f) => f.id === editItem.foodId) || {
+        id: editItem.foodId, n: editItem.name,
+        kcal: editItem.per100?.kcal || 0, p: editItem.per100?.p || 0, c: editItem.per100?.c || 0, f: editItem.per100?.f || 0, fib: editItem.per100?.fib || 0,
+        mc: editItem.mc || {}, m: null,
+      })
+    : null;
   const [q, setQ] = useState("");
-  const [sel, setSel] = useState(null);
-  const [mode, setMode] = useState("gramas");
-  const [qty, setQty] = useState(1);
-  const [grams, setGrams] = useState(100);
-  const [measureIdx, setMeasureIdx] = useState(0);
+  const [sel, setSel] = useState(initialSel);
+  const [mode, setMode] = useState(editItem ? (editItem.mode || (initialSel?.m?.length ? "caseira" : "gramas")) : "gramas");
+  const [qty, setQty] = useState(editItem?.qty ?? 1);
+  const [grams, setGrams] = useState(editItem?.grams ?? 100);
+  const [measureIdx, setMeasureIdx] = useState(editItem?.measureIdx ?? 0);
   const results = q.trim().length < 2 ? [] : foods.filter((f) => f.n.toLowerCase().includes(q.toLowerCase())).slice(0, 14);
   const hasMeasure = sel && sel.m && sel.m.length;
 
-  const pick = (f) => { setSel(f); setMeasureIdx(0); setMode(f.m && f.m.length ? "caseira" : "gramas"); };
+  const pick = (f) => { setSel(f); setMeasureIdx(0); setQty(1); setGrams(100); setMode(f.m && f.m.length ? "caseira" : "gramas"); };
+
+  // ao trocar de "medida caseira" para "gramas", traz o equivalente em gramas
+  // da medida atual, em vez de deixar o valor antigo/padrão parado no campo
+  const switchToGramas = () => {
+    if (hasMeasure) setGrams(r1(sel.m[measureIdx][1] * qty));
+    setMode("gramas");
+  };
+  // ao voltar para "medida caseira", sugere a quantidade equivalente em gramas
+  const switchToCaseira = () => {
+    if (hasMeasure && +grams > 0) setQty(r1(+grams / sel.m[measureIdx][1]));
+    setMode("caseira");
+  };
+
   const confirm = () => {
     let g, label;
     if (mode === "caseira" && hasMeasure) { const me = sel.m[measureIdx]; g = me[1] * qty; label = `${qty} × ${me[0]} (${r0(g)}g)`; }
     else { g = +grams; label = `${r0(g)}g`; }
-    onAdd({ id: uid(), foodId: sel.id, name: sel.n, grams: g, label, per100: { kcal: sel.kcal, p: sel.p, c: sel.c, f: sel.f, fib: sel.fib || 0 }, mc: sel.mc || {} });
+    onConfirm({ id: editItem?.id || uid(), foodId: sel.id, name: sel.n, grams: g, label, mode, qty, measureIdx, per100: { kcal: sel.kcal, p: sel.p, c: sel.c, f: sel.f, fib: sel.fib || 0 }, mc: sel.mc || {} });
   };
 
   return (
     <div className="modal-bg" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
-        <h3>{sel ? "Tipo de medida" : `Adicionar em ${meal?.name}`} <button className="x" onClick={onClose}><X size={20} /></button></h3>
+        <h3>{editItem ? "Editar alimento" : sel ? "Tipo de medida" : `Adicionar em ${meal?.name}`} <button className="x" onClick={onClose}><X size={20} /></button></h3>
         {!sel ? (
           <>
             <div className="searchbar"><Search size={18} /><input className="field" autoFocus placeholder="Buscar alimento (ex.: arroz, frango)…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
             <div className="food-results">
               {results.map((f) => (
                 <div className="fr" key={f.id} onClick={() => pick(f)}>
-                  <div>{f.n}{f.custom ? " ⭐" : ""}<br /><small>{f.kcal} kcal · P{f.p} C{f.c} G{f.f} Fib{f.fib || 0} /100g{f.g ? " · " + f.g : ""}</small></div>
+                  <div>{cleanName(f.n)}{f.custom ? " ⭐" : ""}<br /><small>{f.kcal} kcal · P{f.p} C{f.c} G{f.f} Fib{f.fib || 0} /100g{f.g ? " · " + f.g : ""}</small></div>
                 </div>
               ))}
               {q.trim().length >= 2 && results.length === 0 && <div style={{ padding: 14, color: "var(--ink-soft)" }}>Nenhum alimento encontrado. Cadastre em “Meus Alimentos”.</div>}
@@ -1488,7 +1547,7 @@ function FoodModal({ meal, foods, onClose, onAdd }) {
           <>
             <div style={{ fontWeight: 700, marginBottom: 10 }}>{sel.n}</div>
             {hasMeasure && <>
-              <label className="radio"><input type="radio" checked={mode === "caseira"} onChange={() => setMode("caseira")} /> Medida caseira</label>
+              <label className="radio"><input type="radio" checked={mode === "caseira"} onChange={switchToCaseira} /> Medida caseira</label>
               {mode === "caseira" && (
                 <div className="two" style={{ marginTop: 4 }}>
                   <div><label className="lbl">Medida</label><select className="field" value={measureIdx} onChange={(e) => setMeasureIdx(+e.target.value)}>{sel.m.map((me, i) => <option key={i} value={i}>{me[0]} ({me[1]}g)</option>)}</select></div>
@@ -1496,12 +1555,82 @@ function FoodModal({ meal, foods, onClose, onAdd }) {
                 </div>
               )}
             </>}
-            <label className="radio"><input type="radio" checked={mode === "gramas"} onChange={() => setMode("gramas")} /> Quantidade em gramas/ml</label>
+            <label className="radio"><input type="radio" checked={mode === "gramas"} onChange={switchToGramas} /> Quantidade em gramas/ml</label>
             {mode === "gramas" && <NumInput className="field" value={grams} onChange={(v) => setGrams(v)} placeholder="gramas" />}
-            <div className="foot"><button className="btn ghost" onClick={() => setSel(null)}>Voltar</button><button className="btn" onClick={confirm}>Adicionar</button></div>
+            <div className="foot"><button className="btn ghost" onClick={() => setSel(null)}>Voltar</button><button className="btn" onClick={confirm}>{editItem ? "Salvar" : "Adicionar"}</button></div>
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ---------- Resumo nutricional flutuante e arrastável ---------- */
+function FloatingSummary({ items }) {
+  const [pos, setPos] = useState(null); // null = posição padrão (canto inferior direito)
+  const [collapsed, setCollapsed] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const boxRef = useRef(null);
+  const drag = useRef({ active: false, ox: 0, oy: 0 });
+
+  const pct = (val, t) => (t > 0 ? Math.min(100, (val / t) * 100) : 0);
+
+  const onDragStart = (e) => {
+    e.preventDefault();
+    const point = e.touches ? e.touches[0] : e;
+    const rect = boxRef.current.getBoundingClientRect();
+    drag.current = { active: true, ox: point.clientX - rect.left, oy: point.clientY - rect.top };
+    window.addEventListener("mousemove", onDragMove);
+    window.addEventListener("mouseup", onDragEnd);
+    window.addEventListener("touchmove", onDragMove, { passive: false });
+    window.addEventListener("touchend", onDragEnd);
+  };
+  const onDragMove = (e) => {
+    if (!drag.current.active) return;
+    e.preventDefault();
+    const point = e.touches ? e.touches[0] : e;
+    const w = boxRef.current.offsetWidth, h = boxRef.current.offsetHeight;
+    const x = Math.min(Math.max(0, point.clientX - drag.current.ox), window.innerWidth - w);
+    const y = Math.min(Math.max(0, point.clientY - drag.current.oy), window.innerHeight - h);
+    setPos({ x, y });
+  };
+  const onDragEnd = () => {
+    drag.current.active = false;
+    window.removeEventListener("mousemove", onDragMove);
+    window.removeEventListener("mouseup", onDragEnd);
+    window.removeEventListener("touchmove", onDragMove);
+    window.removeEventListener("touchend", onDragEnd);
+  };
+
+  if (hidden) {
+    return (
+      <button className="floatsum-toggle" title="Mostrar resumo nutricional" onClick={() => setHidden(false)}>
+        <BarChart3 size={20} />
+      </button>
+    );
+  }
+
+  return (
+    <div className="floatsum" ref={boxRef} style={pos ? { left: pos.x, top: pos.y, right: "auto", bottom: "auto" } : undefined}>
+      <div className="floatsum-head" onMouseDown={onDragStart} onTouchStart={onDragStart}>
+        <GripVertical size={14} />
+        <span>Resumo Nutricional</span>
+        <button title={collapsed ? "Expandir" : "Minimizar"} onClick={() => setCollapsed((c) => !c)}>{collapsed ? <Maximize2 size={13} /> : <Minimize2 size={13} />}</button>
+        <button title="Fechar" onClick={() => setHidden(true)}><X size={14} /></button>
+      </div>
+      {!collapsed && (
+        <div className="floatsum-body">
+          {items.map((s) => (
+            <div className="floatsum-it" key={s.lab}>
+              <div className="floatsum-row">
+                <span className="floatsum-lab">{s.lab}</span>
+                <span className="floatsum-val">{r0(s.val)}{s.u} / {r0(s.t)}{s.u} · {r0(pct(s.val, s.t))}%</span>
+              </div>
+              <div className="track"><div style={{ width: pct(s.val, s.t) + "%", background: s.col }} /></div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1963,7 +2092,7 @@ function MyFoodsView({ foods, onAdd, onUpdate, onDel }) {
   const submit = () => {
     const mc = {};
     MICRO_FIELDS.forEach(([k]) => { if (f.micros[k] !== "" && f.micros[k] != null && !isNaN(+f.micros[k])) mc[k] = +f.micros[k]; });
-    const food = { n: f.n.trim(), g: f.g, kcal: +f.kcal || 0, p: +f.p || 0, c: +f.c || 0, f: +f.f || 0, fib: +f.fib || 0, mc };
+    const food = { n: cleanName(f.n), g: f.g, kcal: +f.kcal || 0, p: +f.p || 0, c: +f.c || 0, f: +f.f || 0, fib: +f.fib || 0, mc };
     food.m = (f.measLabel.trim() && f.measGrams) ? [[f.measLabel.trim(), +f.measGrams]] : undefined;
     if (editing) onUpdate(editing, food); else onAdd(food);
     cancel();
@@ -2019,7 +2148,7 @@ function MyFoodsView({ foods, onAdd, onUpdate, onDel }) {
         {list.length === 0 ? <div className="empty" style={{ padding: 30 }}><Apple size={36} style={{ opacity: .4 }} /><p>Nenhum alimento encontrado.</p></div> :
           list.map((x) => (
             <div className="item" key={x.id}>
-              <div style={{ flex: 1 }}><div className="inm">{x.n}{x.custom ? " ⭐" : ""}</div><div className="iqt">{x.m && x.m[0] ? `${x.m[0][0]} = ${x.m[0][1]}g · ` : ""}{x.g || ""} · por 100g</div></div>
+              <div style={{ flex: 1 }}><div className="inm">{cleanName(x.n)}{x.custom ? " ⭐" : ""}</div><div className="iqt">{x.m && x.m[0] ? `${x.m[0][0]} = ${x.m[0][1]}g · ` : ""}{x.g || ""} · por 100g</div></div>
               <div className="imac">{r0(x.kcal)} kcal · P{r1(x.p)} C{r1(x.c)} G{r1(x.f)} Fib{r1(x.fib || 0)}</div>
               <button className="iconbtn" title="Editar" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-soft)", padding: 4 }} onClick={() => startEdit(x)}><Pencil size={15} /></button>
               <button className="iconbtn" title="Excluir" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-soft)", padding: 4 }} onClick={() => onDel(x.id)}><Trash2 size={15} /></button>
@@ -2665,7 +2794,7 @@ function PrintView({ diet, patient, profile }) {
 
       {(diet.supplements || []).length > 0 && (
         <div className="print-section">
-          <div className="meal-title">💊 Suplementação</div>
+          <div className="meal-title">Suplementação</div>
           <table>
             <thead><tr><th style={{ width: '50%' }}>Suplemento</th><th>Dose</th><th>Horário</th></tr></thead>
             <tbody>{diet.supplements.map((s, i) => <tr key={i}><td>{s.name}</td><td>{s.dose}</td><td>{s.time}</td></tr>)}</tbody>
@@ -2682,11 +2811,18 @@ function PrintView({ diet, patient, profile }) {
               {subsEntries.map(([foodId, subs]) => (
                 <tr key={foodId}>
                   <td style={{ fontWeight: 600 }}>{foodNames[foodId] || foodId}</td>
-                  <td>{subs.join(' / ')}</td>
+                  <td>{joinOr(subs)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {diet.note?.trim() && (
+        <div className="print-section">
+          <div className="meal-title">Observação</div>
+          <p style={{ whiteSpace: "pre-wrap" }}>{diet.note.trim()}</p>
         </div>
       )}
     </div>

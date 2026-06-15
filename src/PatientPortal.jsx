@@ -1,22 +1,33 @@
 import React, { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from './supabase'
 import {
   Utensils, Activity, FlaskConical, LogOut, ChevronDown, ChevronUp,
   CalendarDays, Video, HelpCircle, Camera, Send, Check, Clock, ImageIcon,
-  FileDown, UserCircle, Pencil, Scale, TrendingUp, Percent
+  FileDown, UserCircle, Pencil, Scale, TrendingUp, Percent, Pill, Repeat, ClipboardList
 } from 'lucide-react'
 import * as db from './db'
 import { NP_STYLE } from './npStyles'
+
+// remove espaços duplicados/extras digitados no nome do alimento
+const cleanName = (n) => (n || '').replace(/\s+/g, ' ').trim()
+// junta uma lista de substitutos em texto legível: "A ou B" / "A, B ou C"
+const joinOr = (arr) => {
+  if (!arr || arr.length === 0) return ''
+  if (arr.length === 1) return arr[0]
+  return `${arr.slice(0, -1).join(', ')} ou ${arr[arr.length - 1]}`
+}
 
 /* ── estilos de print — replica o PDF de referência ─────────── */
 const PRINT_STYLE = `
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=DM+Sans:wght@400;500;600&display=swap');
 @media print {
-  body * { visibility: hidden !important; }
-  .pp-print, .pp-print * { visibility: visible !important; }
+  body > *:not(.pp-print) { display: none !important; }
   .pp-print {
-    position: fixed; inset: 0;
-    padding: 20mm 22mm;
+    display: block !important;
+    position: static;
+    width: 100%;
+    box-sizing: border-box;
     font-family: 'DM Sans', sans-serif;
     color: #16241d; font-size: 13px; background: #fff;
   }
@@ -32,9 +43,11 @@ const PRINT_STYLE = `
   .pp-meta .dt  { color: #5d6f66; font-size: 13px; }
   .pp-meal { margin-bottom: 20px; page-break-inside: avoid; }
   .pp-meal-head {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
     text-align: center; font-size: 12px; color: #7a8f84;
     font-weight: 600; letter-spacing: .04em; margin-bottom: 6px;
   }
+  .pp-meal-head svg { flex-shrink: 0; }
   .pp-meal table { width: 100%; border-collapse: collapse; }
   .pp-meal th {
     font-size: 11.5px; font-weight: 700; color: #16241d;
@@ -42,9 +55,13 @@ const PRINT_STYLE = `
   }
   .pp-meal th:last-child { text-align: right; }
   .pp-meal td { padding: 9px 0; font-size: 13px; border-bottom: 1px solid #e4e9e3; }
+  .pp-subs { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #7a8f84; margin-top: 2px; }
+  .pp-subs svg { flex-shrink: 0; }
   .pp-meal td:last-child { text-align: right; color: #5d6f66; }
   .pp-sups { margin-top: 18px; page-break-inside: avoid; }
-  @page { margin: 0; size: A4; }
+  .pp-note { margin-top: 18px; page-break-inside: avoid; }
+  .pp-note p { white-space: pre-wrap; font-size: 13px; margin: 0; }
+  @page { margin: 20mm 22mm; size: A4; }
 }
 `
 
@@ -189,11 +206,6 @@ function PtDiets({ diets, patient }) {
                 <button className="btn sm ghost" onClick={() => setOpenId(isOpen ? null : diet.id)}>
                   {isOpen ? <><ChevronUp size={15} /> Fechar</> : <><Pencil size={15} /> Ver dieta</>}
                 </button>
-                {isOpen && (
-                  <button className="btn sm ghost" onClick={() => window.print()} title="Baixar como PDF">
-                    <FileDown size={15} />
-                  </button>
-                )}
               </div>
 
               {isOpen && (
@@ -206,26 +218,42 @@ function PtDiets({ diets, patient }) {
                         <span className="time"><Clock size={13} /> {meal.time}</span>
                       </div>
                       <div className="meal-body">
-                        {meal.items.map((it, i) => (
-                          <div className="item" key={i}>
-                            <div style={{ flex: 1 }}>
-                              <div className="inm">{it.name || it.foodId}</div>
+                        {meal.items.map((it, i) => {
+                          const subs = (diet.subs || {})[it.foodId || it.name] || []
+                          return (
+                            <div className="item" key={i} style={{ alignItems: subs.length ? 'flex-start' : 'center' }}>
+                              <div style={{ flex: 1 }}>
+                                <div className="inm">{cleanName(it.name) || it.foodId}</div>
+                                {subs.length > 0 && (
+                                  <div className="iqt" style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 3 }}>
+                                    <Repeat size={11} style={{ flexShrink: 0 }} />
+                                    <span>Substituir por: {joinOr(subs)}</span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="imac">{it.label || `${it.grams}g`}</div>
                             </div>
-                            <div className="imac">{it.label || `${it.grams}g`}</div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   ))}
 
                   {hasSups && (
                     <div className="panel" style={{ marginTop: 8, marginBottom: 0, background: 'var(--bg)' }}>
-                      <h2 style={{ fontSize: 15, marginBottom: 10 }}>💊 Suplementação</h2>
+                      <h2 style={{ fontSize: 15, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}><Pill size={16} /> Suplementação</h2>
                       <div>
                         {diet.supplements.map((s, i) => (
                           <span key={i} className="chip">{s.name} · {s.dose} · {s.time}</span>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {diet.note?.trim() && (
+                    <div className="panel" style={{ marginTop: 8, marginBottom: 0, background: 'var(--bg)' }}>
+                      <h2 style={{ fontSize: 15, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}><ClipboardList size={16} /> Observação</h2>
+                      <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{diet.note.trim()}</p>
                     </div>
                   )}
                 </div>
@@ -235,7 +263,7 @@ function PtDiets({ diets, patient }) {
         })}
       </div>
 
-      {active && <PrintDiet diet={active} patient={patient} />}
+      {active && createPortal(<PrintDiet diet={active} patient={patient} />, document.body)}
     </>
   )
 }
@@ -252,16 +280,22 @@ function PrintDiet({ diet, patient }) {
       </div>
       {meals.map(meal => (
         <div className="pp-meal" key={meal.id}>
-          <div className="pp-meal-head">{meal.time} — {meal.name}</div>
+          <div className="pp-meal-head"><Utensils size={12} /> {meal.time} — {meal.name}</div>
           <table>
             <thead><tr><th style={{ width: '65%' }}>Alimento</th><th>Porção</th></tr></thead>
             <tbody>
-              {meal.items.map((it, i) => (
-                <tr key={i}>
-                  <td>{it.name || it.foodId}</td>
-                  <td>{it.label || `${it.grams}g`}</td>
-                </tr>
-              ))}
+              {meal.items.map((it, i) => {
+                const subs = (diet.subs || {})[it.foodId || it.name] || []
+                return (
+                  <tr key={i}>
+                    <td>
+                      {cleanName(it.name) || it.foodId}
+                      {subs.length > 0 && <div className="pp-subs"><Repeat size={10} /> Substituir por: {joinOr(subs)}</div>}
+                    </td>
+                    <td>{it.label || `${it.grams}g`}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -269,7 +303,7 @@ function PrintDiet({ diet, patient }) {
       {(diet.supplements || []).length > 0 && (
         <div className="pp-sups">
           <div className="pp-meal">
-            <div className="pp-meal-head">💊 Suplementação</div>
+            <div className="pp-meal-head"><Pill size={12} /> Suplementação</div>
             <table>
               <thead><tr><th style={{ width: '50%' }}>Suplemento</th><th>Dose</th><th>Horário</th></tr></thead>
               <tbody>
@@ -279,6 +313,12 @@ function PrintDiet({ diet, patient }) {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+      {diet.note?.trim() && (
+        <div className="pp-note">
+          <div className="pp-meal-head"><ClipboardList size={12} /> Observação</div>
+          <p>{diet.note.trim()}</p>
         </div>
       )}
     </div>
