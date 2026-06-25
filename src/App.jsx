@@ -513,10 +513,12 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 // remove espaços duplicados/extras digitados no nome do alimento
 const cleanName = (n) => (n || "").replace(/\s+/g, " ").trim();
 // junta uma lista de substitutos em texto legível: "A ou B" / "A, B ou C"
+const subLabel = (s) => typeof s === "string" ? s : `${s.name} (${s.grams}g)`;
 const joinOr = (arr) => {
   if (!arr || arr.length === 0) return "";
-  if (arr.length === 1) return arr[0];
-  return `${arr.slice(0, -1).join(", ")} ou ${arr[arr.length - 1]}`;
+  const labels = arr.map(subLabel);
+  if (labels.length === 1) return labels[0];
+  return `${labels.slice(0, -1).join(", ")} ou ${labels[labels.length - 1]}`;
 };
 const ageFrom = (birth) => {
   if (!birth) return "";
@@ -1188,7 +1190,14 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
   const fFill = ((diet.fatPerKg - 0.5) / (2.0 - 0.5)) * 100;
 
   const usedFoods = useMemo(() => {
-    const seen = {}; diet.meals.forEach((m) => m.items.forEach((it) => { const key = it.foodId || it.name; if (!seen[key]) seen[key] = { id: key, n: it.name || "Alimento" }; }));
+    const seen = {};
+    diet.meals.forEach((m) => m.items.forEach((it) => {
+      const key = it.foodId || it.name;
+      const per100 = it.per100 || { kcal: 0, p: 0, c: 0, f: 0, fib: 0 };
+      const kcal = (per100.kcal || 0) * (+it.grams || 0) / 100;
+      if (!seen[key]) seen[key] = { id: key, n: it.name || "Alimento", kcal: 0 };
+      seen[key].kcal += kcal;
+    }));
     return Object.values(seen).filter(Boolean);
   }, [diet]);
 
@@ -1389,9 +1398,9 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
               <div className="a">{food.n}</div>
               <div className="b">
                 {(diet.subs[food.id] || []).map((s, i) => (
-                  <span className="chip" key={i}>{s}<button onClick={() => setDiet((d) => ({ ...d, subs: { ...d.subs, [food.id]: d.subs[food.id].filter((_, j) => j !== i) } }))}><X size={13} /></button></span>
+                  <span className="chip" key={i}>{subLabel(s)}<button onClick={() => setDiet((d) => ({ ...d, subs: { ...d.subs, [food.id]: d.subs[food.id].filter((_, j) => j !== i) } }))}><X size={13} /></button></span>
                 ))}
-                <SubAdder onAdd={(val) => setDiet((d) => ({ ...d, subs: { ...d.subs, [food.id]: [...(d.subs[food.id] || []), val] } }))} />
+                <SubAdder foods={foods} baseKcal={food.kcal} onAdd={(val) => setDiet((d) => ({ ...d, subs: { ...d.subs, [food.id]: [...(d.subs[food.id] || []), val] } }))} />
               </div>
             </div>
           ))}
@@ -1451,24 +1460,54 @@ function SupplementAdder({ onAdd }) {
   );
 }
 
-function SubAdder({ onAdd }) {
-  const [name, setName] = useState("");
-  const [qty,  setQty]  = useState("");
+function SubAdder({ foods, baseKcal, onAdd }) {
+  const [query, setQuery] = useState("");
+  const [sel, setSel] = useState(null);
+
+  const results = useMemo(() => {
+    if (sel || !query.trim()) return [];
+    const q = query.trim().toLowerCase();
+    return foods.filter((f) => f.n.toLowerCase().includes(q)).slice(0, 8);
+  }, [query, sel, foods]);
+
+  const grams = sel && sel.kcal > 0 && baseKcal > 0 ? Math.round((baseKcal * 100) / sel.kcal) : null;
 
   const add = () => {
-    if (!name.trim()) return;
-    const text = qty.trim() ? `${name.trim()} — ${qty.trim()}` : name.trim();
-    onAdd(text);
-    setName(""); setQty("");
+    if (!sel || !grams) return;
+    onAdd({ foodId: sel.id, name: sel.n, grams });
+    setSel(null); setQuery("");
   };
 
   return (
-    <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap", maxWidth: 560 }}>
-      <input className="field" style={{ flex: 2, minWidth: 150 }} placeholder="Alimento substituto…" value={name}
-        onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") add(); }} />
-      <input className="field" style={{ flex: 1, minWidth: 110 }} placeholder="Quantidade (ex: 130g)" value={qty}
-        onChange={e => setQty(e.target.value)} onKeyDown={e => { if (e.key === "Enter") add(); }} />
-      <button className="btn sm" onClick={add}><Plus size={14} /> Adicionar</button>
+    <div style={{ marginTop: 6 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", maxWidth: 560, alignItems: "center", position: "relative" }}>
+        <input
+          className="field"
+          style={{ flex: 2, minWidth: 150 }}
+          placeholder="Buscar alimento substituto…"
+          value={sel ? sel.n : query}
+          onChange={(e) => { setSel(null); setQuery(e.target.value); }}
+        />
+        {results.length > 0 && (
+          <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 20, background: "#fff", border: "1px solid var(--line)", borderRadius: 8, marginTop: 4, width: 280, maxHeight: 220, overflowY: "auto", boxShadow: "0 4px 14px rgba(0,0,0,.08)" }}>
+            {results.map((f) => (
+              <div
+                key={f.id}
+                style={{ padding: "8px 12px", cursor: "pointer", fontSize: 13, borderBottom: "1px solid #f3f3f3" }}
+                onClick={() => { setSel(f); setQuery(""); }}
+              >
+                {f.n} <span style={{ fontSize: 11, opacity: .6 }}>({f.kcal} kcal/100g)</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {sel && (
+          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--green-d)", whiteSpace: "nowrap" }}>
+            {grams != null ? `≈ ${grams}g (mesma caloria)` : "sem kcal cadastrada"}
+          </span>
+        )}
+        <button className="btn sm" disabled={!sel || !grams} onClick={add}><Plus size={14} /> Adicionar</button>
+      </div>
     </div>
   );
 }
@@ -2404,13 +2443,29 @@ function PatientPortalAdmin({ patient, nutritionistId, onSaveAppt, onBack }) {
   const [videoReqs, setVideoReqs] = useState(null)
   const [reply, setReply]       = useState({})
   const [replying, setReplying] = useState(null)
+  const [feedbacks, setFeedbacks] = useState(null)
+  const [fbWeight, setFbWeight] = useState('')
+  const [fbContent, setFbContent] = useState('')
 
   React.useEffect(() => {
     if (!patient) return
     db.loadPatientMessages(nutritionistId).then(all => setMessages(all.filter(m => m.patient_id === patient.id)))
     db.loadVideoRequests(nutritionistId).then(all => setVideoReqs(all.filter(r => r.patient_id === patient.id)))
     db.loadPatientPhotos(nutritionistId, patient.id).then(setPhotos)
+    db.loadPatientFeedbacks(nutritionistId, patient.id).then(setFeedbacks)
   }, [patient?.id])
+
+  const addFeedback = async () => {
+    if (!fbWeight.trim() && !fbContent.trim()) return
+    const { data, error } = await db.insertPatientFeedback(nutritionistId, patient.id, { weight: fbWeight ? +fbWeight : null, content: fbContent.trim() })
+    if (!error && data) setFeedbacks(prev => [data, ...(prev || [])])
+    setFbWeight(''); setFbContent('')
+  }
+
+  const removeFeedback = async (id) => {
+    await db.deletePatientFeedback(id)
+    setFeedbacks(prev => prev.filter(f => f.id !== id))
+  }
 
   if (!patient) return null
 
@@ -2437,7 +2492,7 @@ function PatientPortalAdmin({ patient, nutritionistId, onSaveAppt, onBack }) {
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
-        {[['appointment','Próxima Consulta'],['messages','Dúvidas'],['photos','Fotos'],['video','Vídeo Chamada']].map(([t,l]) => (
+        {[['appointment','Próxima Consulta'],['feedbacks','Feedbacks'],['messages','Dúvidas'],['photos','Fotos'],['video','Vídeo Chamada']].map(([t,l]) => (
           <button key={t} style={tabStyle(t)} onClick={() => setTab(t)}>{l}</button>
         ))}
       </div>
@@ -2490,6 +2545,42 @@ function PatientPortalAdmin({ patient, nutritionistId, onSaveAppt, onBack }) {
             </div>
           )}
         </div>
+      )}
+
+      {tab === 'feedbacks' && (
+        <>
+          <div className="panel" style={{ maxWidth: 520, marginBottom: 20 }}>
+            <h2 style={{ marginBottom: 4 }}><Scale size={18} style={{ verticalAlign: '-3px' }} /> Novo registro semanal</h2>
+            <p className="ph">Registre o peso e um feedback do acompanhamento desta semana.</p>
+            <div className="two" style={{ marginTop: 16 }}>
+              <div>
+                <label className="lbl"><Scale size={14} /> Peso (kg)</label>
+                <input type="number" step="0.1" className="field" value={fbWeight} onChange={e => setFbWeight(e.target.value)} placeholder="Ex.: 72.4" />
+              </div>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <label className="lbl"><ClipboardList size={14} /> Feedback</label>
+              <textarea className="field" rows={4} value={fbContent} onChange={e => setFbContent(e.target.value)} placeholder="Como foi a semana do paciente, observações, orientações…" style={{ resize: 'vertical' }} />
+            </div>
+            <button className="btn" style={{ marginTop: 14 }} onClick={addFeedback}><Save size={16} /> Salvar registro</button>
+          </div>
+
+          <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, marginBottom: 16 }}>Histórico de feedbacks</h2>
+          {feedbacks === null ? <div className="empty">Carregando…</div> :
+           feedbacks.length === 0 ? <div className="empty"><Scale size={36} style={{ opacity: .4 }} /><p>Nenhum registro ainda.</p></div> :
+           feedbacks.map(f => (
+            <div key={f.id} className="panel" style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ fontSize: 13, color: '#5d6f66' }}>{new Date(f.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                <button className="iconbtn" title="Excluir registro" onClick={() => removeFeedback(f.id)}><Trash2 size={15} /></button>
+              </div>
+              {f.weight != null && (
+                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--green-d)', marginBottom: 8 }}>{f.weight} kg</div>
+              )}
+              {f.content && <div style={{ fontSize: 14, lineHeight: 1.5 }}>{f.content}</div>}
+            </div>
+          ))}
+        </>
       )}
 
       {tab === 'messages' && (

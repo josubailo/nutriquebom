@@ -14,10 +14,13 @@ import { StackedBarChart, AssessComparisonTable } from './assessShared'
 // remove espaços duplicados/extras digitados no nome do alimento
 const cleanName = (n) => (n || '').replace(/\s+/g, ' ').trim()
 // junta uma lista de substitutos em texto legível: "A ou B" / "A, B ou C"
+const subLabel = (s) => typeof s === 'string' ? s : `${s.name} (${s.grams}g)`
+
 const joinOr = (arr) => {
   if (!arr || arr.length === 0) return ''
-  if (arr.length === 1) return arr[0]
-  return `${arr.slice(0, -1).join(', ')} ou ${arr[arr.length - 1]}`
+  const labels = arr.map(subLabel)
+  if (labels.length === 1) return labels[0]
+  return `${labels.slice(0, -1).join(', ')} ou ${labels[labels.length - 1]}`
 }
 
 /* ── estilos de print — replica o PDF de referência ─────────── */

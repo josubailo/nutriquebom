@@ -309,6 +309,28 @@ export async function loadPatientPhotos(nutritionistId, patientId) {
   return data || []
 }
 
+// ── Feedbacks / acompanhamento semanal ───────────────────────
+export async function insertPatientFeedback(nutritionistId, patientId, { weight, content }) {
+  const { data, error } = await supabase.from('patient_feedbacks').insert({
+    patient_id:      patientId,
+    nutritionist_id: nutritionistId,
+    weight:          weight || null,
+    content:         content || null,
+  }).select().single()
+  return { data, error }
+}
+
+export async function loadPatientFeedbacks(nutritionistId, patientId) {
+  const q = supabase.from('patient_feedbacks').select('*').eq('nutritionist_id', nutritionistId)
+  if (patientId) q.eq('patient_id', patientId)
+  const { data } = await q.order('created_at', { ascending: false })
+  return data || []
+}
+
+export async function deletePatientFeedback(feedbackId) {
+  await supabase.from('patient_feedbacks').delete().eq('id', feedbackId)
+}
+
 // ── Próxima consulta ─────────────────────────────────────────
 export async function setNextAppointment(nutritionistId, patientId, nextAppointment) {
   await supabase.from('patients').update({ next_appointment: nextAppointment })
