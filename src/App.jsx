@@ -853,7 +853,7 @@ export default function App() {
           <button className={"navitem" + (view === "myfoods" ? " active" : "")} onClick={() => setView("myfoods")}><Apple size={18} /> Meus Alimentos</button>
           <button className={"navitem" + (view === "profile" ? " active" : "")} onClick={() => setView("profile")}><UserCircle size={18} /> Perfil</button>
 
-          {activePatient && (
+          {activePatient && view !== "portal" && (
             <>
               <div className="navlabel">Paciente Atual</div>
               <div style={{ padding: "0 11px 6px", fontWeight: 600, fontSize: 13 }}>{activePatient.name}</div>
@@ -875,7 +875,29 @@ export default function App() {
         <main className="main">
           {!loaded ? <div className="empty">Carregando…</div> :
             view === "patients" ? <PatientsView patients={patients} onAdd={addPatient} onNewDiet={openNewDiet} onHistory={(p) => { setActivePatient(p); setView("history"); }} onAssessment={openAssessment} onExams={openExams} onAnamnese={openAnamnese} dietsOf={dietsOf} onPortal={(p) => { setActivePatient(p); setView("portal"); }} /> :
-            view === "portal" ? <PatientPortalAdmin patient={activePatient} nutritionistId={user.id} onSaveAppt={(d) => saveNextAppointment(activePatient.id, d)} onBack={() => setView("patients")} /> :
+            view === "portal" ? <PatientPortalAdmin
+              patient={activePatient}
+              nutritionistId={user.id}
+              onSaveAppt={(d) => saveNextAppointment(activePatient.id, d)}
+              onBack={() => { setActivePatient(null); setView("patients"); }}
+              diets={dietsOf(activePatient?.id)}
+              onOpenDiet={(d) => openDiet(activePatient, d)}
+              onNewDiet={() => openNewDiet(activePatient)}
+              onDelDiet={(did) => delDiet(activePatient.id, did)}
+              onDuplicateDiet={(d) => { const copy = { ...JSON.parse(JSON.stringify(d)), id: uid(), name: d.name + " (cópia)", createdAt: Date.now(), active: false }; saveDiet(activePatient.id, copy); }}
+              onRenameDiet={(did, name) => { const diet = dietsOf(activePatient.id).find(x => x.id === did); if (diet) saveDiet(activePatient.id, { ...diet, name }); }}
+              onSetActiveDiet={(did) => { dietsOf(activePatient.id).forEach(d => saveDiet(activePatient.id, { ...d, active: d.id === did })); }}
+              assessments={assessOf(activePatient?.id)}
+              onSaveAssessment={(a) => saveAssessment(activePatient.id, a)}
+              onDelAssessment={(aid) => delAssessment(activePatient.id, aid)}
+              exams={examsOf(activePatient?.id)}
+              onSaveExam={(e) => saveExam(activePatient.id, e)}
+              onDelExam={(eid) => delExam(activePatient.id, eid)}
+              anamneseTemplate={data.anamneseTemplate || DEFAULT_ANAMNESE}
+              anamneseAnswers={anamneseOf(activePatient?.id)}
+              onSaveAnamneseAnswers={(a) => saveAnamnese(activePatient.id, a)}
+              onSaveAnamneseTemplate={saveTemplate}
+            /> :
             view === "agenda" ? <AgendaView patients={patients} /> :
             view === "myfoods" ? <MyFoodsView foods={foods} onAdd={addFood} onUpdate={updateFood} onDel={delFood} /> :
             view === "assessment" ? <AssessmentView patient={activePatient} assessments={assessOf(activePatient?.id)} onSave={(a) => saveAssessment(activePatient.id, a)} onDel={(aid) => delAssessment(activePatient.id, aid)} onPickPatient={() => setView("patients")} /> :
@@ -923,12 +945,12 @@ function PatientsView({ patients, onAdd, onNewDiet, onHistory, onAssessment, onE
                 <div><ClipboardList size={14} /> {dietsOf(p.id).length} dieta(s)</div>
               </div>
               <div className="acts">
-                <button className="btn sm" onClick={() => onNewDiet(p)}><Utensils size={15} /> Nova Dieta</button>
+                <button className="btn sm wide" onClick={() => onPortal(p)} style={{ background: '#1f9d63' }}><UserCircle size={15} /> Portal do Paciente</button>
                 <button className="btn sm ghost" onClick={() => onHistory(p)}><ClipboardList size={15} /> Ver Dietas</button>
                 <button className="btn sm ghost" onClick={() => onAssessment(p)}><Activity size={15} /> Avaliação</button>
                 <button className="btn sm ghost" onClick={() => onExams(p)}><FlaskConical size={15} /> Exames</button>
-                <button className="btn sm ghost wide" onClick={() => onAnamnese(p)}><FileText size={15} /> Anamnese</button>
-                <button className="btn sm ghost wide" onClick={() => onPortal(p)} style={{ color: '#1f9d63', borderColor: '#cde8d8' }}><UserCircle size={15} /> Portal do Paciente</button>
+                <button className="btn sm ghost" onClick={() => onAnamnese(p)}><FileText size={15} /> Anamnese</button>
+                <button className="btn sm ghost wide" onClick={() => onNewDiet(p)}><Utensils size={15} /> Nova Dieta</button>
               </div>
             </div>
           ))}
@@ -2429,7 +2451,13 @@ function PhotoGallery({ photos, canDelete, onDelete }) {
 }
 
 /* ── Portal do Paciente — visão do admin ──────────────────── */
-function PatientPortalAdmin({ patient, nutritionistId, onSaveAppt, onBack }) {
+function PatientPortalAdmin({
+  patient, nutritionistId, onSaveAppt, onBack,
+  diets, onOpenDiet, onNewDiet, onDelDiet, onDuplicateDiet, onRenameDiet, onSetActiveDiet,
+  assessments, onSaveAssessment, onDelAssessment,
+  exams, onSaveExam, onDelExam,
+  anamneseTemplate, anamneseAnswers, onSaveAnamneseAnswers, onSaveAnamneseTemplate,
+}) {
   const [tab, setTab]           = useState('appointment')
 
   // Parse appt value → date + time
@@ -2467,6 +2495,16 @@ function PatientPortalAdmin({ patient, nutritionistId, onSaveAppt, onBack }) {
     setFeedbacks(prev => prev.filter(f => f.id !== id))
   }
 
+  const initialWeight = useMemo(() => {
+    const assessSorted = [...(assessments || [])].filter((a) => a.weight).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    if (assessSorted.length) return +assessSorted[0].weight;
+    const fbSorted = [...(feedbacks || [])].filter((f) => f.weight != null).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    if (fbSorted.length) return +fbSorted[0].weight;
+    return null;
+  }, [assessments, feedbacks]);
+
+  const latestWeight = feedbacks && feedbacks.length ? feedbacks[0].weight : null;
+
   if (!patient) return null
 
   const sendReply = async (msgId) => {
@@ -2492,7 +2530,7 @@ function PatientPortalAdmin({ patient, nutritionistId, onSaveAppt, onBack }) {
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
-        {[['appointment','Próxima Consulta'],['feedbacks','Feedbacks'],['messages','Dúvidas'],['photos','Fotos'],['video','Vídeo Chamada']].map(([t,l]) => (
+        {[['diets','Dietas'],['assessment','Avaliação'],['exams','Exames'],['anamnese','Anamnese'],['appointment','Próxima Consulta'],['feedbacks','Feedbacks'],['messages','Dúvidas'],['photos','Fotos'],['video','Vídeo Chamada']].map(([t,l]) => (
           <button key={t} style={tabStyle(t)} onClick={() => setTab(t)}>{l}</button>
         ))}
       </div>
@@ -2547,8 +2585,47 @@ function PatientPortalAdmin({ patient, nutritionistId, onSaveAppt, onBack }) {
         </div>
       )}
 
+      {tab === 'diets' && (
+        <HistoryView patient={patient} diets={diets} onOpen={onOpenDiet} onNew={onNewDiet} onDel={onDelDiet} onDuplicate={onDuplicateDiet} onRename={onRenameDiet} onSetActive={onSetActiveDiet} />
+      )}
+
+      {tab === 'assessment' && (
+        <AssessmentView patient={patient} assessments={assessments} onSave={onSaveAssessment} onDel={onDelAssessment} onPickPatient={onBack} />
+      )}
+
+      {tab === 'exams' && (
+        <ExamsView patient={patient} exams={exams} onSave={onSaveExam} onDel={onDelExam} onPickPatient={onBack} />
+      )}
+
+      {tab === 'anamnese' && (
+        <AnamneseView key={patient.id} patient={patient} template={anamneseTemplate} answers={anamneseAnswers} onSaveAnswers={onSaveAnamneseAnswers} onSaveTemplate={onSaveAnamneseTemplate} onPickPatient={onBack} />
+      )}
+
       {tab === 'feedbacks' && (
         <>
+          {initialWeight != null && (
+            <div className="panel" style={{ maxWidth: 520, marginBottom: 20, display: 'flex', gap: 28, alignItems: 'center' }}>
+              <div>
+                <div className="ph" style={{ marginBottom: 2 }}>Peso inicial</div>
+                <div style={{ fontWeight: 700, fontSize: 22, color: 'var(--ink)' }}>{initialWeight} kg</div>
+              </div>
+              {latestWeight != null && (
+                <div>
+                  <div className="ph" style={{ marginBottom: 2 }}>Peso atual</div>
+                  <div style={{ fontWeight: 700, fontSize: 22, color: 'var(--green-d)' }}>{latestWeight} kg</div>
+                </div>
+              )}
+              {latestWeight != null && (
+                <div>
+                  <div className="ph" style={{ marginBottom: 2 }}>Variação</div>
+                  <div style={{ fontWeight: 700, fontSize: 22, color: latestWeight - initialWeight <= 0 ? '#1f9d63' : '#e5484d' }}>
+                    {latestWeight - initialWeight > 0 ? '+' : ''}{r1(latestWeight - initialWeight)} kg
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="panel" style={{ maxWidth: 520, marginBottom: 20 }}>
             <h2 style={{ marginBottom: 4 }}><Scale size={18} style={{ verticalAlign: '-3px' }} /> Novo registro semanal</h2>
             <p className="ph">Registre o peso e um feedback do acompanhamento desta semana.</p>
