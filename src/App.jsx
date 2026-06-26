@@ -1211,17 +1211,19 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
   const pFill = ((diet.proteinPerKg - 1.0) / (3.5 - 1.0)) * 100;
   const fFill = ((diet.fatPerKg - 0.5) / (2.0 - 0.5)) * 100;
 
-  const usedFoods = useMemo(() => {
-    const seen = {};
-    diet.meals.forEach((m) => m.items.forEach((it) => {
-      const key = it.foodId || it.name;
-      const per100 = it.per100 || { kcal: 0, p: 0, c: 0, f: 0, fib: 0 };
-      const kcal = (per100.kcal || 0) * (+it.grams || 0) / 100;
-      if (!seen[key]) seen[key] = { id: key, n: it.name || "Alimento", kcal: 0, grams: 0 };
-      seen[key].kcal += kcal;
-      seen[key].grams += (+it.grams || 0);
-    }));
-    return Object.values(seen).filter(Boolean);
+  const usedFoodsByMeal = useMemo(() => {
+    return diet.meals.filter((m) => m.items.length).map((m) => {
+      const seen = {};
+      m.items.forEach((it) => {
+        const key = it.foodId || it.name;
+        const per100 = it.per100 || { kcal: 0, p: 0, c: 0, f: 0, fib: 0 };
+        const kcal = (per100.kcal || 0) * (+it.grams || 0) / 100;
+        if (!seen[key]) seen[key] = { id: key, n: it.name || "Alimento", kcal: 0, grams: 0 };
+        seen[key].kcal += kcal;
+        seen[key].grams += (+it.grams || 0);
+      });
+      return { meal: m, items: Object.values(seen) };
+    });
   }, [diet]);
 
   const pct = (val, t) => (t > 0 ? Math.min(100, (val / t) * 100) : 0);
@@ -1415,16 +1417,21 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
       <div className="panel">
         <h2><Repeat size={18} style={{ verticalAlign: "-3px" }} /> Substituições Permitidas</h2>
         <p className="ph">Defina alternativas para cada alimento usado na dieta.</p>
-        {usedFoods.length === 0 ? <div className="empty" style={{ padding: 24 }}>Adicione alimentos às refeições para definir substituições.</div> :
-          usedFoods.map((food) => (
-            <div className="subrow" key={food.id}>
-              <div className="a">{food.n} <span style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 400 }}>({r0(food.grams)}g)</span></div>
-              <div className="b">
-                {(diet.subs[food.id] || []).map((s, i) => (
-                  <span className="chip" key={i}>{subLabel(s)}<button onClick={() => setDiet((d) => ({ ...d, subs: { ...d.subs, [food.id]: d.subs[food.id].filter((_, j) => j !== i) } }))}><X size={13} /></button></span>
-                ))}
-                <SubAdder foods={foods} baseKcal={food.kcal} onAdd={(val) => setDiet((d) => ({ ...d, subs: { ...d.subs, [food.id]: [...(d.subs[food.id] || []), val] } }))} />
-              </div>
+        {usedFoodsByMeal.length === 0 ? <div className="empty" style={{ padding: 24 }}>Adicione alimentos às refeições para definir substituições.</div> :
+          usedFoodsByMeal.map(({ meal, items }) => (
+            <div key={meal.id} style={{ marginBottom: 18 }}>
+              <div style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--green-d)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid var(--line)' }}>{meal.name}</div>
+              {items.map((food) => (
+                <div className="subrow" key={food.id}>
+                  <div className="a">{food.n} <span style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 400 }}>({r0(food.grams)}g)</span></div>
+                  <div className="b">
+                    {(diet.subs[food.id] || []).map((s, i) => (
+                      <span className="chip" key={i}>{subLabel(s)}<button onClick={() => setDiet((d) => ({ ...d, subs: { ...d.subs, [food.id]: d.subs[food.id].filter((_, j) => j !== i) } }))}><X size={13} /></button></span>
+                    ))}
+                    <SubAdder foods={foods} baseKcal={food.kcal} onAdd={(val) => setDiet((d) => ({ ...d, subs: { ...d.subs, [food.id]: [...(d.subs[food.id] || []), val] } }))} />
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
       </div>
