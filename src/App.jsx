@@ -1217,8 +1217,9 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
       const key = it.foodId || it.name;
       const per100 = it.per100 || { kcal: 0, p: 0, c: 0, f: 0, fib: 0 };
       const kcal = (per100.kcal || 0) * (+it.grams || 0) / 100;
-      if (!seen[key]) seen[key] = { id: key, n: it.name || "Alimento", kcal: 0 };
+      if (!seen[key]) seen[key] = { id: key, n: it.name || "Alimento", kcal: 0, grams: 0 };
       seen[key].kcal += kcal;
+      seen[key].grams += (+it.grams || 0);
     }));
     return Object.values(seen).filter(Boolean);
   }, [diet]);
@@ -1417,7 +1418,7 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
         {usedFoods.length === 0 ? <div className="empty" style={{ padding: 24 }}>Adicione alimentos às refeições para definir substituições.</div> :
           usedFoods.map((food) => (
             <div className="subrow" key={food.id}>
-              <div className="a">{food.n}</div>
+              <div className="a">{food.n} <span style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 400 }}>({r0(food.grams)}g)</span></div>
               <div className="b">
                 {(diet.subs[food.id] || []).map((s, i) => (
                   <span className="chip" key={i}>{subLabel(s)}<button onClick={() => setDiet((d) => ({ ...d, subs: { ...d.subs, [food.id]: d.subs[food.id].filter((_, j) => j !== i) } }))}><X size={13} /></button></span>
@@ -1482,6 +1483,11 @@ function SupplementAdder({ onAdd }) {
   );
 }
 
+const niceRound = (g) => {
+  const step = g >= 100 ? 10 : 5;
+  return Math.max(step, Math.round(g / step) * step);
+};
+
 function SubAdder({ foods, baseKcal, onAdd }) {
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState(null);
@@ -1492,7 +1498,8 @@ function SubAdder({ foods, baseKcal, onAdd }) {
     return foods.filter((f) => f.n.toLowerCase().includes(q)).slice(0, 8);
   }, [query, sel, foods]);
 
-  const grams = sel && sel.kcal > 0 && baseKcal > 0 ? Math.round((baseKcal * 100) / sel.kcal) : null;
+  const raw = sel && sel.kcal > 0 && baseKcal > 0 ? (baseKcal * 100) / sel.kcal : null;
+  const grams = raw != null ? niceRound(raw) : null;
 
   const add = () => {
     if (!sel || !grams) return;
@@ -1524,8 +1531,8 @@ function SubAdder({ foods, baseKcal, onAdd }) {
           </div>
         )}
         {sel && (
-          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--green-d)", whiteSpace: "nowrap" }}>
-            {grams != null ? `≈ ${grams}g (mesma caloria)` : "sem kcal cadastrada"}
+          <span style={{ fontSize: 11.5, fontWeight: 500, color: "var(--ink-soft)", whiteSpace: "nowrap" }}>
+            {grams != null ? `≈ ${grams}g` : "sem kcal cadastrada"}
           </span>
         )}
         <button className="btn sm" disabled={!sel || !grams} onClick={add}><Plus size={14} /> Adicionar</button>
@@ -2458,7 +2465,7 @@ function PatientPortalAdmin({
   exams, onSaveExam, onDelExam,
   anamneseTemplate, anamneseAnswers, onSaveAnamneseAnswers, onSaveAnamneseTemplate,
 }) {
-  const [tab, setTab]           = useState('appointment')
+  const [tab, setTab]           = useState('feedbacks')
 
   // Parse appt value → date + time
   const rawAppt = patient?.nextAppointment || '';
@@ -2530,7 +2537,7 @@ function PatientPortalAdmin({
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
-        {[['diets','Dietas'],['assessment','Avaliação'],['exams','Exames'],['anamnese','Anamnese'],['appointment','Próxima Consulta'],['feedbacks','Feedbacks'],['messages','Dúvidas'],['photos','Fotos'],['video','Vídeo Chamada']].map(([t,l]) => (
+        {[['feedbacks','Feedbacks'],['diets','Dietas'],['assessment','Avaliação'],['exams','Exames'],['anamnese','Anamnese'],['appointment','Próxima Consulta'],['messages','Dúvidas'],['photos','Fotos'],['video','Vídeo Chamada']].map(([t,l]) => (
           <button key={t} style={tabStyle(t)} onClick={() => setTab(t)}>{l}</button>
         ))}
       </div>
