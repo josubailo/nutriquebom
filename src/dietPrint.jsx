@@ -39,7 +39,7 @@ export function DietPrintBody({ diet, patient, profile }) {
               <span className="nm"><Utensils size={13} /> {meal.name}</span>
               <span className="tm"><Clock size={12} /> {meal.time}</span>
             </div>
-            <div className="dp-cols">
+            <div className="dp-meal-body">
               <table className="dp-table">
                 <thead><tr><th>Alimento</th><th>Porção</th></tr></thead>
                 <tbody>
@@ -84,7 +84,7 @@ export function DietPrintBody({ diet, patient, profile }) {
         <div className="dp-sups">
           <div className="dp-meal">
             <div className="dp-meal-head"><span className="nm"><Pill size={13} /> Suplementação</span></div>
-            <div className="dp-cols">
+            <div className="dp-meal-body">
               <table className="dp-table">
                 <thead><tr><th>Suplemento</th><th>Dose / Horário</th></tr></thead>
                 <tbody>
@@ -99,9 +99,9 @@ export function DietPrintBody({ diet, patient, profile }) {
       )}
 
       {diet.note?.trim() && (
-        <div className="dp-note">
+        <div className="dp-meal dp-note">
           <div className="dp-meal-head"><span className="nm"><ClipboardList size={13} /> Observação</span></div>
-          <p>{diet.note.trim()}</p>
+          <div className="dp-meal-body"><p>{diet.note.trim()}</p></div>
         </div>
       )}
     </>
