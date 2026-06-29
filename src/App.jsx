@@ -256,13 +256,16 @@ const _STYLE_START = `
 /* print */
 .np-print { display:none; }
 @media print {
+  @page { margin: 18mm 16mm; size: A4; }
   body * { visibility: hidden; }
   .np-print, .np-print * { visibility: visible; }
-  .np-print { display:block; position:absolute; left:0; top:0; width:100%; padding:30px; font-family:'DM Sans',sans-serif; color:#16241d; }
+  .np-print { display:block; position:absolute; left:0; top:0; width:100%; padding:6px; font-family:'DM Sans',sans-serif; color:#16241d; }
   .np-print h1 { color:#1f9d63; font-family:'Fraunces',serif; text-align:center; }
   .np-print .meal-title { background:#1f9d63; color:#fff; padding:8px 14px; border-radius:8px; font-weight:700; margin:18px 0 0; }
   .np-print table { width:100%; border-collapse:collapse; }
   .np-print td, .np-print th { padding:7px 10px; text-align:left; border-bottom:1px solid #e4e9e3; font-size:13px; }
+  .np-print .subs-table { margin-top:4px; }
+  .np-print .subs-table td { padding:4px 8px; font-size:11px; color:#666; border-bottom:1px solid #f0f0f0; }
 }
 `; // _STYLE_START (não usado — mantido apenas como referência histórica)
 const STYLE = NP_STYLE;
@@ -3056,23 +3059,24 @@ function PrintView({ diet, patient, profile }) {
               <thead><tr><th style={{ width: '65%' }}>Alimento</th><th>Porção</th></tr></thead>
               <tbody>{m.items.map((it) => <tr key={it.id}><td>{it.name}</td><td>{it.label}</td></tr>)}</tbody>
             </table>
-            {m.items.some((it) => (diet.subs || {})[it.foodId || it.name]?.length > 0) && (
-              <table style={{ marginTop: 4, fontSize: '0.85em' }}>
+            {(m.items.some((it) => (diet.subs || {})[it.foodId || it.name]?.length > 0) || mealSubs.length > 0) && (
+              <table className="subs-table">
                 <tbody>
                   {m.items.filter((it) => (diet.subs || {})[it.foodId || it.name]?.length > 0).map((it) => (
                     <tr key={it.id}>
-                      <td style={{ width: '40%', color: '#666' }}>↳ {it.name}</td>
-                      <td style={{ color: '#666' }}>pode substituir por: {joinOr(diet.subs[it.foodId || it.name])}</td>
+                      <td style={{ width: '40%' }}>• {it.name}</td>
+                      <td>pode substituir por: {joinOr(diet.subs[it.foodId || it.name])}</td>
+                    </tr>
+                  ))}
+                  {mealSubs.map((rs, i) => (
+                    <tr key={'r' + i}>
+                      <td style={{ width: '40%' }}>• Refeição inteira</td>
+                      <td>substituir por <b>{rs.name}</b>: {recipeLabel(rs)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
-            {mealSubs.map((rs, i) => (
-              <p key={i} style={{ fontSize: '0.85em', color: '#666', margin: '4px 0 0' }}>
-                ↳ Substituir a refeição toda por <b>{rs.name}</b>: {recipeLabel(rs)}
-              </p>
-            ))}
           </div>
         );
       })}
