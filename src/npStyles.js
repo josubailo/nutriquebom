@@ -252,28 +252,6 @@ export const NP_STYLE = `
 .np .exrow { display:flex; align-items:center; gap:12px; padding:13px 4px; border-bottom:1px solid var(--line); }
 .np .exrow:last-child { border-bottom:none; }
 
-/* print admin */
-.np-print { display:none; }
-@media print {
-  /* Esconde toda a UI, mostra apenas o bloco de impressão */
-  .np > .layout { display: none !important; }
-  .np-print {
-    display: block !important;
-    position: static !important;
-    width: 100%;
-    padding: 20mm 18mm;
-    font-family: 'DM Sans', sans-serif;
-    color: #16241d;
-    background: white;
-  }
-  .np-print h1 { color:#1f9d63; font-family:'Fraunces',serif; text-align:center; margin:0 0 16px; }
-  .np-print .meal-title { background:#1f9d63; color:#fff; padding:8px 14px; border-radius:8px; font-weight:700; margin:18px 0 6px; page-break-after: avoid; }
-  .np-print table { width:100%; border-collapse:collapse; margin-bottom: 4px; }
-  .np-print td, .np-print th { padding:7px 10px; text-align:left; border-bottom:1px solid #e4e9e3; font-size:13px; }
-  .np-print .print-section { page-break-inside: avoid; }
-  @page { margin: 0; size: A4; }
-}
-
 @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
 
 /* ── Responsivo para celular ──────────────────────────────────── */

@@ -10,6 +10,8 @@ import * as db from './db'
 import { NP_STYLE } from './npStyles'
 import { assessResults } from './assessCalc'
 import { StackedBarChart, AssessComparisonTable } from './assessShared'
+import { DIET_PRINT_STYLE } from './dietPrintStyle'
+import { DietPrintBody } from './dietPrint'
 
 // remove espaços duplicados/extras digitados no nome do alimento
 const cleanName = (n) => (n || '').replace(/\s+/g, ' ').trim()
@@ -24,52 +26,6 @@ const joinOr = (arr) => {
   return `${labels.slice(0, -1).join(', ')} ou ${labels[labels.length - 1]}`
 }
 
-/* ── estilos de print — replica o PDF de referência ─────────── */
-const PRINT_STYLE = `
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=DM+Sans:wght@400;500;600&display=swap');
-@media print {
-  body > *:not(.pp-print) { display: none !important; }
-  .pp-print {
-    display: block !important;
-    position: static;
-    width: 100%;
-    box-sizing: border-box;
-    font-family: 'DM Sans', sans-serif;
-    color: #16241d; font-size: 13px; background: #fff;
-  }
-  .pp-title {
-    font-family: 'Fraunces', serif; font-size: 30px; font-weight: 700;
-    color: #1f9d63; text-align: center; margin: 0 0 16px; letter-spacing: -.3px;
-  }
-  .pp-meta {
-    display: flex; justify-content: space-between; align-items: baseline;
-    border-bottom: 1.5px solid #e4e9e3; padding-bottom: 10px; margin-bottom: 22px;
-  }
-  .pp-meta .pac { font-weight: 700; font-size: 13px; }
-  .pp-meta .dt  { color: #5d6f66; font-size: 13px; }
-  .pp-meal { margin-bottom: 20px; page-break-inside: avoid; }
-  .pp-meal-head {
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    text-align: center; font-size: 12px; color: #7a8f84;
-    font-weight: 600; letter-spacing: .04em; margin-bottom: 6px;
-  }
-  .pp-meal-head svg { flex-shrink: 0; }
-  .pp-meal table { width: 100%; border-collapse: collapse; }
-  .pp-meal th {
-    font-size: 11.5px; font-weight: 700; color: #16241d;
-    text-align: left; padding: 5px 0; border-bottom: 1.5px solid #16241d;
-  }
-  .pp-meal th:last-child { text-align: right; }
-  .pp-meal td { padding: 9px 0; font-size: 13px; border-bottom: 1px solid #e4e9e3; }
-  .pp-subs { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #7a8f84; margin-top: 2px; }
-  .pp-subs svg { flex-shrink: 0; }
-  .pp-meal td:last-child { text-align: right; color: #5d6f66; }
-  .pp-sups { margin-top: 18px; page-break-inside: avoid; }
-  .pp-note { margin-top: 18px; page-break-inside: avoid; }
-  .pp-note p { white-space: pre-wrap; font-size: 13px; margin: 0; }
-  @page { margin: 20mm 22mm; size: A4; }
-}
-`
 
 /* ══════════════════════════════════════════════════════════════ */
 export default function PatientPortal({ patientData }) {
@@ -95,7 +51,7 @@ export default function PatientPortal({ patientData }) {
   return (
     <div className="np">
       <style>{NP_STYLE}</style>
-      <style>{PRINT_STYLE}</style>
+      <style>{DIET_PRINT_STYLE}</style>
       <div className="layout">
 
         {/* ── Sidebar ─────────────────────────────────────────── */}
@@ -275,68 +231,13 @@ function PtDiets({ diets, patient }) {
         })}
       </div>
 
-      {active && createPortal(<PrintDiet diet={active} patient={patient} />, document.body)}
+      {active && createPortal(
+        <div className="dp-print" style={{ display: 'none' }}>
+          <DietPrintBody diet={active} patient={patient} />
+        </div>,
+        document.body
+      )}
     </>
-  )
-}
-
-/* ── Print layout ────────────────────────────────────────────── */
-function PrintDiet({ diet, patient }) {
-  const meals = (diet.meals || []).filter(m => m.items?.length > 0)
-  return (
-    <div className="pp-print" style={{ display: 'none' }}>
-      <div className="pp-title">Plano Alimentar Personalizado</div>
-      <div className="pp-meta">
-        <span className="pac">Paciente: {patient.name}</span>
-        <span className="dt">Data: {new Date().toLocaleDateString('pt-BR')}</span>
-      </div>
-      {meals.map(meal => (
-        <div className="pp-meal" key={meal.id}>
-          <div className="pp-meal-head"><Utensils size={12} /> {meal.time} — {meal.name}</div>
-          <table>
-            <thead><tr><th style={{ width: '65%' }}>Alimento</th><th>Porção</th></tr></thead>
-            <tbody>
-              {meal.items.map((it, i) => {
-                const subs = (diet.subs || {})[it.foodId || it.name] || []
-                return (
-                  <tr key={i}>
-                    <td>
-                      {cleanName(it.name) || it.foodId}
-                      {subs.length > 0 && <div className="pp-subs"><Repeat size={10} /> Substituir por: {joinOr(subs)}</div>}
-                    </td>
-                    <td>{it.label || `${it.grams}g`}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          {((diet.mealSubs || {})[meal.id] || []).map((rs, i) => (
-            <div key={i} className="pp-subs" style={{ marginTop: 4 }}><Repeat size={10} /> Substituir a refeição toda por <b>{rs.name}</b>: {recipeSubLabel(rs)}</div>
-          ))}
-        </div>
-      ))}
-      {(diet.supplements || []).length > 0 && (
-        <div className="pp-sups">
-          <div className="pp-meal">
-            <div className="pp-meal-head"><Pill size={12} /> Suplementação</div>
-            <table>
-              <thead><tr><th style={{ width: '50%' }}>Suplemento</th><th>Dose</th><th>Horário</th></tr></thead>
-              <tbody>
-                {diet.supplements.map((s, i) => (
-                  <tr key={i}><td>{s.name}</td><td>{s.dose}</td><td>{s.time}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-      {diet.note?.trim() && (
-        <div className="pp-note">
-          <div className="pp-meal-head"><ClipboardList size={12} /> Observação</div>
-          <p>{diet.note.trim()}</p>
-        </div>
-      )}
-    </div>
   )
 }
 
@@ -677,7 +578,7 @@ function PtVideo({ patient, reqs, onAdd }) {
                   <Video size={20} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700 }}>{r.preferred_date ? fmtDate(r.preferred_date) : '—'}</div>
+                  <div style={{ fontWeight: 700 }}>{r.preferred_date ? fmtDate(r.preferred_date) : '-'}</div>
                   {r.message && <div className="sub" style={{ fontSize: 13, marginTop: 2 }}>{r.message}</div>}
                   <div style={{ color: 'var(--ink-soft)', fontSize: 12, marginTop: 2 }}>{new Date(r.created_at).toLocaleDateString('pt-BR')}</div>
                 </div>
@@ -693,7 +594,7 @@ function PtVideo({ patient, reqs, onAdd }) {
   )
 }
 
-/* ══ AVALIAÇÕES — com gráficos de evolução ═════════════════════ */
+/* ══ AVALIAÇÕES - com gráficos de evolução ═════════════════════ */
 function PtMiniChart({ points, color, suffix = '' }) {
   if (!points || points.length === 0) return null
   if (points.length === 1) return (
@@ -745,7 +646,7 @@ function PtAssessments({ assessments }) {
             <div key={a.id} className="panel" style={{ marginBottom: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <h2 style={{ margin: 0, fontSize: 17 }}>
-                  Avaliação de {a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                  Avaliação de {a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
                 </h2>
                 {idx === 0 && (
                   <span style={{ fontSize: 11.5, background: 'var(--green-soft)', color: 'var(--green-d)', padding: '3px 10px', borderRadius: 999, fontWeight: 700 }}>
@@ -755,10 +656,10 @@ function PtAssessments({ assessments }) {
               </div>
               <div className="resgrid">
                 {[
-                  { l: 'Peso',       v: a.weight ? `${a.weight}` : '—', u: 'kg', color: 'var(--ink)' },
-                  { l: 'Altura',     v: a.height ? `${a.height}` : '—', u: 'cm', color: 'var(--ink)' },
-                  { l: '% Gordura',  v: bf ? r1pt(bf).toFixed(1) : '—', u: '%',  color: bfCol },
-                  { l: 'Massa Magra', v: lm ? r1pt(lm).toFixed(1) : '—', u: ' kg', color: '#1f9d63' },
+                  { l: 'Peso',       v: a.weight ? `${a.weight}` : '-', u: 'kg', color: 'var(--ink)' },
+                  { l: 'Altura',     v: a.height ? `${a.height}` : '-', u: 'cm', color: 'var(--ink)' },
+                  { l: '% Gordura',  v: bf ? r1pt(bf).toFixed(1) : '-', u: '%',  color: bfCol },
+                  { l: 'Massa Magra', v: lm ? r1pt(lm).toFixed(1) : '-', u: ' kg', color: '#1f9d63' },
                 ].map(b => (
                   <div key={b.l} className="rescard">
                     <div className="rl">{b.l}</div>
@@ -785,7 +686,7 @@ function PtAssessments({ assessments }) {
   )
 }
 
-/* ══ EXAMES — agrupados por marcador com evolução ══════════════ */
+/* ══ EXAMES - agrupados por marcador com evolução ══════════════ */
 function PtExams({ exams, patient }) {
   const [openGroup, setOpenGroup] = useState(null)
 
@@ -851,7 +752,7 @@ function PtExams({ exams, patient }) {
                   {g.entries.length > 1 && (
                     <div className="chartcard" style={{ marginBottom: 16 }}>
                       <div className="ct" style={{ marginBottom: 8 }}>
-                        <TrendingUp size={14} style={{ color: 'var(--green)' }} /> Evolução — {g.name}
+                        <TrendingUp size={14} style={{ color: 'var(--green)' }} /> Evolução - {g.name}
                         {g.ref && <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--ink-soft)', fontWeight: 400 }}>ref: {g.ref} {g.unit}</span>}
                       </div>
                       <PtMiniChart points={chartPoints} color={statusColor} suffix={g.unit ? ` ${g.unit}` : ''} />
@@ -867,7 +768,7 @@ function PtExams({ exams, patient }) {
                       <div key={e.id || i} className="exrow">
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 500 }}>
-                            {e.date ? new Date(e.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                            {e.date ? new Date(e.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
                           </div>
                         </div>
                         <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 17 }}>
@@ -1014,7 +915,7 @@ function PtPhotoGallery({ photos, onDelete }) {
 
 /* ── Helpers ─────────────────────────────────────────────────── */
 function fmtDate(d) {
-  if (!d) return '—'
+  if (!d) return '-'
   const hasTime = d.includes('T') && d.length > 10
   const dt = hasTime ? new Date(d) : new Date(d + 'T12:00:00')
   if (isNaN(dt)) return d

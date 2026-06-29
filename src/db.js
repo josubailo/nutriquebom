@@ -1,5 +1,5 @@
 /**
- * db.js — todas as operações com o Supabase
+ * db.js - todas as operações com o Supabase
  * O App.jsx chama essas funções ao invés de mexer direto no banco.
  */
 import { supabase } from './supabase'

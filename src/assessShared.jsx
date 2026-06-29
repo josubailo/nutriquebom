@@ -47,7 +47,7 @@ export function StackedBarChart({ rows }) {
         );
       })}
 
-      {/* Line — Massa corporal total */}
+      {/* Line - Massa corporal total */}
       {rows.length > 1 && (
         <polyline
           points={rows.map((x, i) => `${toX(i).toFixed(1)},${toY(+x.a.weight || 0).toFixed(1)}`).join(' ')}
@@ -61,7 +61,7 @@ export function StackedBarChart({ rows }) {
       {/* Date labels */}
       {rows.map((x, i) => (
         <text key={i} x={toX(i)} y={H - 6} fontSize="9" fill="#5d6f66" textAnchor="middle">
-          {x.a.date ? new Date(x.a.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'}
+          {x.a.date ? new Date(x.a.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'}
         </text>
       ))}
 
@@ -87,7 +87,7 @@ const fmtDelta = (cur, prev) => {
   return <span style={{ fontSize: 11, color: up ? '#e5484d' : '#1f9d63', marginLeft: 3, whiteSpace: 'nowrap' }}>{up ? '↑' : '↓'} ({up ? '+' : ''}{d})</span>;
 };
 
-/* Tabela comparativa de avaliações — usada no Builder (com edição) e no Portal (somente leitura) */
+/* Tabela comparativa de avaliações - usada no Builder (com edição) e no Portal (somente leitura) */
 export function AssessComparisonTable({ rows, editable = false, onEdit }) {
   return (
     <div className="panel" style={{ marginTop: 14, padding: 0, overflow: 'hidden' }}>
@@ -99,7 +99,7 @@ export function AssessComparisonTable({ rows, editable = false, onEdit }) {
               <th style={{ ...headStyle, textAlign: 'left', minWidth: 180 }}>Parâmetro</th>
               {rows.map((x, i) => (
                 <th key={i} style={headStyle}>
-                  {x.a.date ? new Date(x.a.date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                  {x.a.date ? new Date(x.a.date + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
                 </th>
               ))}
               {editable && <th style={{ ...headStyle, width: 36 }}></th>}
@@ -130,7 +130,7 @@ export function AssessComparisonTable({ rows, editable = false, onEdit }) {
                             {r1(val)}
                             {fmtDelta(val, prev)}
                           </span>
-                        ) : '—'}
+                        ) : '-'}
                       </td>
                     );
                   })}
@@ -145,7 +145,7 @@ export function AssessComparisonTable({ rows, editable = false, onEdit }) {
         <div style={{ padding: '10px 16px', borderTop: '1px solid #eef2ee', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {rows.map((x, i) => (
             <button key={i} className="btn sm ghost" style={{ fontSize: 12 }} onClick={() => onEdit(x.a.id)}>
-              <Pencil size={13} /> {x.a.date ? new Date(x.a.date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+              <Pencil size={13} /> {x.a.date ? new Date(x.a.date + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
             </button>
           ))}
         </div>

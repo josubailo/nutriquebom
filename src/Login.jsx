@@ -221,7 +221,7 @@ export default function Login() {
     <div className="login-wrap">
       <style>{STYLE}</style>
 
-      {/* Lado esquerdo — branding */}
+      {/* Lado esquerdo - branding */}
       <div className="login-left">
         <div className="logo"><Utensils size={26} color="#fff" /></div>
         <h1>Nutriquébom</h1>
@@ -236,7 +236,7 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Lado direito — formulário */}
+      {/* Lado direito - formulário */}
       <div className="login-right">
         <div className="login-card">
 

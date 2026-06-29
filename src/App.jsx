@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Users, CalendarDays, Activity, FlaskConical, UserCircle, Utensils,
   Plus, Search, X, Copy, ChevronDown, ChevronUp, Pencil, Trash2,
@@ -13,266 +14,16 @@ import PatientPortal from "./PatientPortal";
 import { NP_STYLE } from "./npStyles";
 import { r0, r1, assessResults, imcClass, bfClass } from "./assessCalc";
 import { StackedBarChart, AssessComparisonTable } from "./assessShared";
+import { DIET_PRINT_STYLE } from "./dietPrintStyle";
+import { DietPrintBody } from "./dietPrint";
 //import "./supabase"; APENAS TESTE DO BD
 
 /* ============================================================
-   NutriPlano — app de nutrição (nome provisório, fácil de trocar)
+   NutriPlano - app de nutrição (nome provisório, fácil de trocar)
    ============================================================ */
 const APP_NAME = "Nutriquébom";
 
-/* ---------- Tema / CSS — definido em npStyles.js ---------- */
-const _STYLE_START = `
-
-.np * { box-sizing: border-box; }
-.np {
-  --bg: #f4f6f3;
-  --panel: #ffffff;
-  --ink: #16241d;
-  --ink-soft: #5d6f66;
-  --line: #e4e9e3;
-  --green: #1f9d63;
-  --green-d: #157a4c;
-  --green-soft: #e7f4ec;
-  --p: #e5484d;   /* proteína */
-  --c: #f1932c;   /* carbo */
-  --f: #2d7ff9;   /* gordura */
-  --fib: #6aa84f; /* fibra */
-  --kcal: #1f9d63;
-  font-family: 'DM Sans', sans-serif;
-  color: var(--ink);
-  background: var(--bg);
-  min-height: 100vh;
-  font-size: 14px;
-}
-.np .serif { font-family: 'Fraunces', serif; }
-
-.np .layout { display: flex; min-height: 100vh; }
-.np .side {
-  width: 232px; flex-shrink: 0; background: var(--panel);
-  border-right: 1px solid var(--line); padding: 20px 14px;
-  display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh;
-}
-.np .brand { display:flex; align-items:center; gap:9px; padding: 4px 8px 18px; }
-.np .brand .logo {
-  width: 30px; height: 30px; border-radius: 9px;
-  background: linear-gradient(135deg, var(--green), #2bbd7c);
-  display:grid; place-items:center; color:#fff;
-}
-.np .brand b { font-family:'Fraunces',serif; font-size: 18px; font-weight: 700; }
-.np .navlabel { font-size: 10.5px; letter-spacing: .12em; color: var(--ink-soft); font-weight:700; padding: 14px 10px 6px; text-transform: uppercase; }
-.np .navitem {
-  display:flex; align-items:center; gap:11px; padding: 9px 11px; border-radius: 10px;
-  color: var(--ink-soft); cursor: pointer; font-weight: 500; border: none; background: none; width: 100%; text-align: left; font-size: 14px;
-  transition: .15s;
-}
-.np .navitem:hover { background: var(--bg); color: var(--ink); }
-.np .navitem.active { background: var(--green-soft); color: var(--green-d); font-weight: 600; }
-.np .navitem.soon { opacity:.5; cursor: default; }
-.np .navitem.soon:hover { background:none; color: var(--ink-soft); }
-.np .badge-soon { margin-left:auto; font-size:9.5px; background:var(--line); color:var(--ink-soft); padding:1px 6px; border-radius:6px; font-weight:600; }
-
-.np .main { flex: 1; padding: 30px 38px; max-width: 1180px; }
-.np h1.title { font-family:'Fraunces',serif; font-size: 30px; font-weight: 600; margin: 0; }
-.np h1.title span { color: var(--green); }
-.np .sub { color: var(--ink-soft); margin: 4px 0 0; }
-
-.np .btn {
-  display:inline-flex; align-items:center; gap:7px; border: none; cursor: pointer;
-  background: var(--green); color:#fff; padding: 10px 16px; border-radius: 11px; font-weight: 600; font-size: 14px;
-  font-family:'DM Sans',sans-serif; transition:.15s;
-}
-.np .btn:hover { background: var(--green-d); }
-.np .btn.ghost { background:#fff; color: var(--ink); border:1px solid var(--line); }
-.np .btn.ghost:hover { background: var(--bg); }
-.np .btn.sm { padding: 7px 12px; font-size: 13px; border-radius:9px; }
-.np .btn.danger { background:#fff; color:var(--p); border:1px solid #f3d2d3; }
-
-.np .field { background:#fff; border:1px solid var(--line); border-radius: 12px; padding: 11px 13px; width:100%; font-size:14px; color:var(--ink); font-family:'DM Sans',sans-serif; outline:none; }
-.np .field:focus { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
-.np select.field { appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%235d6f66' stroke-width='2'%3E%3Cpath d='M3 5l4 4 4-4'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position: right 13px center; padding-right:34px; }
-.np label.lbl { font-size: 12.5px; font-weight:600; color:var(--ink-soft); display:flex; align-items:center; gap:6px; margin-bottom:6px; }
-
-.np .searchbar { position:relative; flex:1; }
-.np .searchbar svg { position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--ink-soft); }
-.np .searchbar input { padding-left:40px; }
-
-.np .grid-cards { display:grid; grid-template-columns: repeat(auto-fill, minmax(320px,1fr)); gap:16px; margin-top:20px; }
-.np .pcard { background:#fff; border:1px solid var(--line); border-radius:16px; padding:18px; transition:.15s; }
-.np .pcard:hover { box-shadow: 0 8px 24px rgba(22,36,29,.07); transform: translateY(-2px); }
-.np .pcard .top { display:flex; gap:13px; align-items:center; margin-bottom:14px; }
-.np .avatar { width:46px; height:46px; border-radius:50%; background:var(--green-soft); display:grid; place-items:center; color:var(--green-d); flex-shrink:0; }
-.np .pcard .nm { font-weight:700; font-size:16px; }
-.np .pcard .ag { color:var(--ink-soft); font-size:13px; }
-.np .pcard .meta { display:flex; flex-direction:column; gap:6px; color:var(--ink-soft); font-size:13px; margin-bottom:15px; }
-.np .pcard .meta div { display:flex; align-items:center; gap:8px; }
-.np .pcard .acts { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-.np .pcard .acts .wide { grid-column: span 2; }
-
-.np .modal-bg { position:fixed; inset:0; background:rgba(22,36,29,.45); display:grid; place-items:center; z-index:50; padding:20px; }
-.np .modal { background:#fff; border-radius:18px; width:100%; max-width:440px; padding:24px; max-height:90vh; overflow:auto; }
-.np .modal h3 { font-family:'Fraunces',serif; font-size:21px; margin:0 0 18px; display:flex; justify-content:space-between; align-items:center; }
-.np .modal .x { cursor:pointer; color:var(--ink-soft); background:none; border:none; }
-.np .modal .row { margin-bottom:14px; }
-.np .modal .foot { display:flex; gap:10px; margin-top:8px; }
-.np .modal .foot .btn { flex:1; justify-content:center; }
-
-/* builder */
-.np .topbar { display:flex; align-items:center; gap:16px; margin-bottom:24px; }
-.np .topbar .ttl { font-family:'Fraunces',serif; font-size:22px; flex:1; }
-.np .panel { background:#fff; border:1px solid var(--line); border-radius:16px; padding:22px; margin-bottom:18px; }
-.np .panel h2 { font-family:'Fraunces',serif; font-size:19px; margin:0 0 4px; }
-.np .panel .ph { color:var(--ink-soft); font-size:13px; margin:0 0 18px; }
-.np .sex-toggle { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:18px; }
-.np .sexbtn { border:2px solid var(--line); background:#fff; border-radius:14px; padding:16px; cursor:pointer; text-align:center; font-weight:600; font-size:15px; transition:.15s; }
-.np .sexbtn .emo { font-size:26px; display:block; margin-bottom:4px; }
-.np .sexbtn.on { border-color:var(--green); background:var(--green-soft); color:var(--green-d); }
-.np .three { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-bottom:16px; }
-.np .two { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; }
-
-.np .calc { background:var(--green-soft); border:1px solid #cde8d8; border-radius:14px; padding:18px; display:flex; gap:40px; align-items:center; flex-wrap:wrap; }
-.np .calc .blk .k { font-size:12px; color:var(--ink-soft); display:flex; align-items:center; gap:6px; }
-.np .calc .blk .v { font-family:'Fraunces',serif; font-size:30px; font-weight:700; }
-.np .calc .blk .v.vet { color:var(--green-d); }
-.np .calc .note { color:var(--ink-soft); font-size:13px; }
-
-/* sliders */
-.np .slider-row { margin: 22px 0; }
-.np .slider-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
-.np .slider-head .name { display:flex; align-items:center; gap:8px; font-weight:600; }
-.np .pill { font-weight:700; padding:5px 12px; border-radius:999px; font-size:14px; }
-.np .pill.p { background:#fde8e9; color:var(--p); }
-.np .pill.c { background:#fdedd9; color:var(--c); }
-.np .pill.f { background:#e1ecfe; color:var(--f); }
-.np input[type=range] { -webkit-appearance:none; appearance:none; width:100%; height:8px; border-radius:999px; outline:none; }
-.np input[type=range].p { background: linear-gradient(90deg,var(--p) var(--fill,50%), #f6dadb var(--fill,50%)); }
-.np input[type=range].f { background: linear-gradient(90deg,var(--f) var(--fill,50%), #d9e7fd var(--fill,50%)); }
-.np input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:22px; border-radius:50%; background:#fff; border:3px solid var(--green); cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.18); }
-.np input[type=range]::-moz-range-thumb { width:22px; height:22px; border-radius:50%; background:#fff; border:3px solid var(--green); cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.18); }
-.np .scale { display:flex; justify-content:space-between; color:var(--ink-soft); font-size:11.5px; margin-top:6px; }
-.np .carbbar { height:8px; border-radius:999px; background:#fdedd9; overflow:hidden; }
-.np .carbbar > div { height:100%; background:var(--c); border-radius:999px; }
-
-.np .macrotable { width:100%; border-collapse:collapse; margin-top:18px; font-size:13px; }
-.np .macrotable th, .np .macrotable td { padding:9px 12px; text-align:center; border-bottom:1px solid var(--line); }
-.np .macrotable th:first-child, .np .macrotable td:first-child { text-align:left; color:var(--ink-soft); }
-.np .macrotable thead th { font-weight:700; }
-.np .macrotable .cp { color:var(--p); font-weight:700; }
-.np .macrotable .cc { color:var(--c); font-weight:700; }
-.np .macrotable .cf { color:var(--f); font-weight:700; }
-
-/* resumo nutricional */
-.np .summary { display:grid; grid-template-columns: repeat(4,1fr); gap:18px; }
-.np .summary.five { grid-template-columns: repeat(5,1fr); gap:14px; }
-.np .micros { display:grid; grid-template-columns: repeat(2,1fr); gap:10px 26px; }
-.np .micro { }
-.np .micro.hi { grid-column: span 2; background:var(--green-soft); border:1px solid #cde8d8; border-radius:10px; padding:10px 12px; }
-.np .micro .top { display:flex; justify-content:space-between; font-size:13px; margin-bottom:5px; }
-.np .micro .top .nm { font-weight:600; }
-.np .micro .top .vl { color:var(--ink-soft); }
-.np .micro .top .vl b { color:var(--ink); }
-.np .summary .it .lab { font-size:12px; color:var(--ink-soft); }
-.np .summary .it .big { font-family:'Fraunces',serif; font-size:22px; font-weight:700; }
-.np .summary .it .tgt { font-size:12px; color:var(--ink-soft); }
-.np .track { height:6px; border-radius:999px; background:var(--line); margin:7px 0; overflow:hidden; }
-.np .track > div { height:100%; border-radius:999px; }
-
-/* meals */
-.np .meal { border:1px solid var(--line); border-radius:14px; margin-bottom:12px; overflow:hidden; background:#fff; }
-.np .meal-head { display:flex; align-items:center; gap:12px; padding:14px 16px; background:#fbfcfb; }
-.np .meal-head .mn { font-weight:700; font-size:15px; }
-.np .meal-head .time { color:var(--ink-soft); font-size:13px; display:flex; align-items:center; gap:5px; }
-.np .meal-macros { margin-left:auto; display:flex; gap:14px; align-items:center; font-size:12.5px; font-weight:600; }
-.np .meal-macros .iconbtn { color:var(--ink-soft); background:none; border:none; cursor:pointer; padding:4px; border-radius:6px; }
-.np .meal-macros .iconbtn:hover { background:var(--bg); color:var(--ink); }
-.np .meal-body { padding:14px 16px; }
-.np .item { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); }
-.np .item:last-child { border-bottom:none; }
-.np .item .inm { font-weight:500; }
-.np .item .iqt { color:var(--ink-soft); font-size:12.5px; }
-.np .item .imac { margin-left:auto; font-size:12px; color:var(--ink-soft); }
-.np .food-search { position:relative; margin-top:8px; }
-.np .food-results { border:1px solid var(--line); border-radius:12px; margin-top:6px; max-height:230px; overflow:auto; }
-.np .food-results .fr { display:flex; justify-content:space-between; padding:10px 13px; cursor:pointer; border-bottom:1px solid var(--line); }
-.np .food-results .fr:last-child { border-bottom:none; }
-.np .food-results .fr:hover { background:var(--green-soft); }
-.np .food-results .fr small { color:var(--ink-soft); }
-
-.np .subrow { display:flex; gap:14px; padding:12px 0; border-bottom:1px solid var(--line); align-items:flex-start; }
-.np .subrow:last-child { border-bottom:none; }
-.np .subrow .a { width:200px; font-weight:600; flex-shrink:0; }
-.np .subrow .b { flex:1; }
-.np .chip { display:inline-flex; align-items:center; gap:6px; background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:12.5px; margin:0 6px 6px 0; }
-.np .chip button { background:none; border:none; cursor:pointer; color:var(--ink-soft); display:flex; }
-
-.np .empty { text-align:center; color:var(--ink-soft); padding:50px 20px; }
-.np .radio { display:flex; align-items:center; gap:9px; padding:9px 0; cursor:pointer; }
-.np .radio input { accent-color: var(--green); width:17px; height:17px; }
-
-/* avaliação física */
-.np .tabs { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:20px 0 6px; }
-.np .tabbtn { padding:13px; border-radius:12px; border:1px solid var(--line); background:#fff; cursor:pointer; font-weight:600; font-size:14px; display:flex; align-items:center; justify-content:center; gap:8px; color:var(--ink-soft); }
-.np .tabbtn.on { background:var(--green); color:#fff; border-color:var(--green); }
-.np .stepper { display:flex; align-items:flex-start; margin: 6px 0 22px; }
-.np .stepcol { display:flex; flex-direction:column; align-items:center; gap:6px; }
-.np .dot { width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-weight:700; background:#fff; border:2px solid var(--line); color:var(--ink-soft); flex-shrink:0; transition:.2s; }
-.np .dot.on { background:var(--green); border-color:var(--green); color:#fff; }
-.np .dot.done { background:var(--green-soft); border-color:var(--green); color:var(--green-d); }
-.np .steplabel { font-size:11px; color:var(--ink-soft); text-align:center; max-width:80px; }
-.np .barline { flex:1; height:2px; background:var(--line); margin:17px 4px 0; border-radius:2px; }
-.np .barline.on { background:var(--green); }
-
-.np .methods { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:6px; }
-.np .method { border:2px solid var(--line); border-radius:16px; padding:20px; cursor:pointer; transition:.15s; }
-.np .method:hover { border-color:#bfe0cd; }
-.np .method.on { border-color:var(--green); background:var(--green-soft); }
-.np .method .mi { width:46px; height:46px; border-radius:13px; display:grid; place-items:center; margin-bottom:13px; color:#fff; }
-.np .method h4 { margin:0 0 7px; font-size:16px; font-family:'Fraunces',serif; }
-.np .method p { margin:0; font-size:12.5px; color:var(--ink-soft); line-height:1.5; }
-.np .method .tag { color:var(--green-d); font-size:12px; font-weight:600; margin-top:11px; display:block; }
-
-.np .ingrid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
-.np .ingrid.two { grid-template-columns:repeat(2,1fr); }
-
-.np .resgrid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px; }
-.np .rescard { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px; text-align:center; }
-.np .rescard .rl { font-size:12px; color:var(--ink-soft); margin-bottom:4px; }
-.np .rescard .rv { font-family:'Fraunces',serif; font-size:28px; font-weight:700; }
-.np .rescard .rc { font-size:11.5px; font-weight:700; margin-top:5px; display:inline-block; padding:2px 9px; border-radius:999px; }
-
-.np .photodrop { border:2px dashed var(--line); border-radius:14px; padding:22px; text-align:center; cursor:pointer; color:var(--ink-soft); }
-.np .photodrop:hover { border-color:var(--green); color:var(--green-d); }
-.np .photodrop img { max-height:120px; border-radius:8px; }
-.np .infobox { background:#fff7ed; border:1px solid #fcd9a8; color:#8a5a13; border-radius:12px; padding:13px 15px; font-size:13px; margin:14px 0; }
-
-.np .histrow { display:grid; grid-template-columns:1fr 90px 90px 100px 80px 40px; gap:8px; align-items:center; padding:11px 4px; border-bottom:1px solid var(--line); font-size:13.5px; }
-.np .histrow .hh { color:var(--ink-soft); font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
-.np .delta { font-size:12px; font-weight:600; }
-.np .chartwrap { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:18px; }
-.np .chartcard { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; }
-.np .chartcard .ct { font-weight:600; font-size:13px; margin-bottom:6px; display:flex; align-items:center; gap:7px; }
-.np .exrow { display:flex; align-items:center; gap:12px; padding:13px 4px; border-bottom:1px solid var(--line); }
-.np .exrow:last-child { border-bottom:none; }
-
-/* print */
-.np-print { display:none; }
-@media print {
-  @page { margin: 18mm 16mm; size: A4; }
-  body * { visibility: hidden; }
-  .np-print, .np-print * { visibility: visible; }
-  .np-print { display:block; position:absolute; left:0; top:0; width:100%; padding:6px; font-family:'DM Sans',sans-serif; color:#16241d; }
-  .np-print h1 { color:#1f9d63; font-family:'Fraunces',serif; text-align:center; }
-  .np-print .meal-title { background:#1f9d63; color:#fff; padding:8px 14px; border-radius:8px; font-weight:700; margin:18px 0 0; }
-  .np-print table { width:100%; border-collapse:collapse; }
-  .np-print td, .np-print th { padding:7px 10px; text-align:left; border-bottom:1px solid #e4e9e3; font-size:13px; }
-  .np-print .subs-box { margin-top:8px; padding:8px 10px 10px; background:#f7f9f7; border:1px solid #e4e9e3; border-radius:8px; }
-  .np-print .subs-label { font-size:9.5px; text-transform:uppercase; letter-spacing:.04em; color:#1f9d63; font-weight:700; margin:0 0 4px; }
-  .np-print .subs-table { width:100%; border-collapse:collapse; }
-  .np-print .subs-table td { padding:3px 6px; font-size:10px; color:#555; border-bottom:1px solid #e9eee8; }
-  .np-print .subs-table tr:last-child td { border-bottom:none; }
-  .np-print .recipe-box { margin-top:8px; padding:6px 10px 10px; background:#eef7f1; border:1px solid #cde8d8; border-radius:8px; }
-  .np-print .recipe-head { font-size:11px; font-weight:700; color:#157a4c; margin:2px 0 6px; }
-}
-`; // _STYLE_START (não usado — mantido apenas como referência histórica)
+/* ---------- Tema / CSS - definido em npStyles.js ---------- */
 const STYLE = NP_STYLE;
 
 /* ---------- Dados ---------- */
@@ -310,8 +61,8 @@ function tmbCalc(formula, sex, weight, height, age, bf) {
   return 0;
 }
 
-// base alimentos por 100g (valores aproximados — tabela inicial, expansível)
-/* ---------- Base de alimentos comuns (porção habitual) — macros, fibra e micronutrientes via TACO 4ª ed., por 100 g ---------- */
+// base alimentos por 100g (valores aproximados - tabela inicial, expansível)
+/* ---------- Base de alimentos comuns (porção habitual) - macros, fibra e micronutrientes via TACO 4ª ed., por 100 g ---------- */
 const FOODS = [
   {id:"f0",n:"Ovo de galinha, cozido",g:"Proteínas",kcal:146,p:13.3,c:0.6,f:9.5,fib:0,m:[["1 unidade",50]],mc:{ca:49.2,fe:1.5,mg:11.2,k:138.9,na:145.9,zn:1.2,va:0,vc:0,b6:0}},
   {id:"f1",n:"Ovo de galinha, frito",g:"Proteínas",kcal:240,p:15.6,c:1.2,f:18.6,fib:0,m:[["1 unidade",50]],mc:{ca:72.9,fe:2.1,mg:16.3,k:184,na:166.1,zn:1.5,va:0,vc:0,b6:0}},
@@ -431,7 +182,7 @@ const EXAM_CATALOG = [
 const examRange = (cat, sex) => cat ? (cat.r || (sex === "F" ? cat.rF : cat.rM)) : null;
 function classifyExam(cat, sex, result) {
   const rg = examRange(cat, sex);
-  if (!rg || result === "" || result == null || isNaN(+result)) return { status: "—", color: "var(--ink-soft)" };
+  if (!rg || result === "" || result == null || isNaN(+result)) return { status: "-", color: "var(--ink-soft)" };
   const v = +result;
   if (v < rg[0]) return { status: "Baixo", color: "#2d7ff9" };
   if (v > rg[1]) return { status: "Alto", color: "#e5484d" };
@@ -492,9 +243,9 @@ const SKINFOLDS = {
   subescapular: "Subescapular", abdominal: "Abdominal", supraIliaca: "Supra-ilíaca", coxa: "Coxa",
 };
 const EQUATIONS = {
-  jp3: "Jackson & Pollock — 3 dobras",
-  jp7: "Jackson & Pollock — 7 dobras",
-  faulkner: "Faulkner — 4 dobras",
+  jp3: "Jackson & Pollock - 3 dobras",
+  jp7: "Jackson & Pollock - 7 dobras",
+  faulkner: "Faulkner - 4 dobras",
 };
 const EQ_FIELDS = {
   jp3: (sex) => (sex === "M" ? ["peitoral", "abdominal", "coxa"] : ["triceps", "supraIliaca", "coxa"]),
@@ -522,12 +273,6 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 const cleanName = (n) => (n || "").replace(/\s+/g, " ").trim();
 // junta uma lista de substitutos em texto legível: "A ou B" / "A, B ou C"
 const subLabel = (s) => typeof s === "string" ? s : `${s.name} (${s.grams}g)`;
-const joinOr = (arr) => {
-  if (!arr || arr.length === 0) return "";
-  const labels = arr.map(subLabel);
-  if (labels.length === 1) return labels[0];
-  return `${labels.slice(0, -1).join(", ")} ou ${labels[labels.length - 1]}`;
-};
 const ageFrom = (birth) => {
   if (!birth) return "";
   const d = new Date(birth); if (isNaN(d)) return "";
@@ -744,7 +489,7 @@ export default function App() {
     });
   }, [user, profile]);
 
-  /* ── CRUD — cada operação atualiza estado local E salva no Supabase ── */
+  /* ── CRUD - cada operação atualiza estado local E salva no Supabase ── */
   const patients = data.patients;
   const dietsOf  = (pid) => data.diets[pid] || [];
 
@@ -1073,7 +818,7 @@ function PatientModal({ onClose, onSave }) {
         {/* Separador de acesso ao portal */}
         <div style={{ borderTop: '1px solid #e4e9e3', margin: '16px 0 14px', paddingTop: 14 }}>
           <div style={{ fontWeight: 700, fontSize: 13, color: '#1f9d63', marginBottom: 4 }}>🔑 Acesso ao Portal do Paciente</div>
-          <div style={{ fontSize: 12, color: '#5d6f66', marginBottom: 12 }}>Opcional — preencha para que o paciente possa entrar no portal.</div>
+          <div style={{ fontSize: 12, color: '#5d6f66', marginBottom: 12 }}>Opcional - preencha para que o paciente possa entrar no portal.</div>
           <div className="row" style={{ marginBottom: 12 }}>
             <label className="lbl"><Mail size={14} /> E-mail de acesso</label>
             <input className="field" type="email" value={f.email} onChange={(e) => up("email", e.target.value)} placeholder="email@paciente.com" />
@@ -1123,7 +868,7 @@ function HistoryView({ patient, diets, onOpen, onNew, onDel, onDuplicate, onRena
 
   return (
     <>
-      <div className="topbar"><h1 className="title" style={{ flex: 1 }}>Dietas — <span>{patient.name}</span></h1><button className="btn" onClick={onNew}><Plus size={17} /> Nova Dieta</button></div>
+      <div className="topbar"><h1 className="title" style={{ flex: 1 }}>Dietas - <span>{patient.name}</span></h1><button className="btn" onClick={onNew}><Plus size={17} /> Nova Dieta</button></div>
       <p className="sub" style={{ marginTop: -14, marginBottom: 18 }}>Duplique um plano para periodizar e use "Publicar para paciente" para definir qual dieta ele verá no portal.</p>
       {diets.length === 0 ? <div className="empty"><ClipboardList size={40} style={{ opacity: .4 }} /><p>Nenhuma dieta montada ainda.</p></div> :
         diets.map((d) => {
@@ -1192,7 +937,7 @@ function AgendaView({ patients }) {
   const passadas  = withAppt.filter(p => (p.nextAppointment || '') < hoje);
 
   const fmtApptDate = (raw) => {
-    if (!raw) return '—';
+    if (!raw) return '-';
     const dt = new Date(raw.includes('T') ? raw : raw + 'T12:00');
     const dateStr = dt.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
     const timeStr = raw.includes('T') && raw.length > 10 ? ` · ${raw.slice(11, 16)}` : '';
@@ -1319,7 +1064,7 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, recipes, profi
     <>
       <div className="topbar">
         <button className="btn sm ghost" onClick={onBack}><ArrowLeft size={16} /> Voltar</button>
-        <div className="ttl">Dieta — {patient?.name}</div>
+        <div className="ttl">Dieta - {patient?.name}</div>
         <button className="btn sm ghost" onClick={() => window.print()}><FileDown size={16} /> Gerar PDF</button>
         <button className="btn sm" onClick={() => setSaveModal(true)}><Save size={16} /> Salvar</button>
       </div>
@@ -1361,7 +1106,7 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, recipes, profi
           <div className="note">Peso: {diet.weight}kg · {diet.objective === "manutencao" ? "manutenção" : `${diet.adjust} kcal (${diet.objective === "emagrecimento" ? "déficit" : "superávit"})`}</div>
         </div>
 
-        {/* Sliders de macro — o coração */}
+        {/* Sliders de macro - o coração */}
         <div className="slider-row">
           <div className="slider-head"><div className="name">🥩 Proteína</div><div className="pill p">{r1(diet.proteinPerKg)} g/kg</div></div>
           <input type="range" className="p" min="1.0" max="3.5" step="0.1" value={diet.proteinPerKg} style={{ "--fill": pFill + "%" }} onChange={(e) => up("proteinPerKg", +e.target.value)} />
@@ -1477,7 +1222,7 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, recipes, profi
             );
           })}
         </div>
-        <p className="ph" style={{ marginTop: 14, marginBottom: 0 }}>Observação: a tabela TACO não traz Vitamina D, B12 e E — preencha esses valores nos alimentos em “Meus Alimentos” para que apareçam aqui. Alimentos próprios entram com fibra e com os micronutrientes que você informar.</p>
+        <p className="ph" style={{ marginTop: 14, marginBottom: 0 }}>Observação: a tabela TACO não traz Vitamina D, B12 e E - preencha esses valores nos alimentos em “Meus Alimentos” para que apareçam aqui. Alimentos próprios entram com fibra e com os micronutrientes que você informar.</p>
       </div>
 
       {/* Suplementação */}
@@ -1920,7 +1665,7 @@ function AssessmentWizard({ patient, onSave, initialData }) {
     <>
       <Stepper steps={steps} step={step} />
       <div className="panel">
-        {/* STEP 0 — Dados Básicos */}
+        {/* STEP 0 - Dados Básicos */}
         {step === 0 && (
           <>
             <h2><Scale size={18} style={{ verticalAlign: "-3px" }} /> Dados Básicos</h2>
@@ -1944,7 +1689,7 @@ function AssessmentWizard({ patient, onSave, initialData }) {
           </>
         )}
 
-        {/* STEP 1 — Método */}
+        {/* STEP 1 - Método */}
         {step === 1 && (
           <>
             <h2><Activity size={18} style={{ verticalAlign: "-3px" }} /> Método de Avaliação</h2>
@@ -1972,17 +1717,17 @@ function AssessmentWizard({ patient, onSave, initialData }) {
           </>
         )}
 
-        {/* STEP 2 manual — Perímetros */}
+        {/* STEP 2 manual - Perímetros */}
         {step === 2 && a.method === "manual" && (
           <>
             <h2><Ruler size={18} style={{ verticalAlign: "-3px" }} /> Perímetros Corporais</h2>
             <p className="ph">Medidas em centímetros (deixe em branco o que não medir).</p>
             <NumGrid keys={Object.keys(PERIMETERS)} labels={PERIMETERS} values={a.perimeters} onChange={(k, v) => upObj("perimeters", k, v)} />
-            {res.rcq > 0 && <div className="infobox" style={{ background: "var(--green-soft)", border: "1px solid #cde8d8", color: "var(--green-d)" }}>Relação Cintura/Quadril (RCQ): <b>{r1(res.rcq) ? res.rcq.toFixed(2) : "—"}</b></div>}
+            {res.rcq > 0 && <div className="infobox" style={{ background: "var(--green-soft)", border: "1px solid #cde8d8", color: "var(--green-d)" }}>Relação Cintura/Quadril (RCQ): <b>{r1(res.rcq) ? res.rcq.toFixed(2) : "-"}</b></div>}
           </>
         )}
 
-        {/* STEP 3 manual — Dobras */}
+        {/* STEP 3 manual - Dobras */}
         {step === 3 && a.method === "manual" && (
           <>
             <h2><Percent size={18} style={{ verticalAlign: "-3px" }} /> Dobras Cutâneas</h2>
@@ -1996,7 +1741,7 @@ function AssessmentWizard({ patient, onSave, initialData }) {
           </>
         )}
 
-        {/* STEP 2 bio — valores */}
+        {/* STEP 2 bio - valores */}
         {step === 2 && a.method === "bioimpedancia" && (
           <>
             <h2><Scale size={18} style={{ verticalAlign: "-3px" }} /> Resultados da Bioimpedância</h2>
@@ -2009,7 +1754,7 @@ function AssessmentWizard({ patient, onSave, initialData }) {
           </>
         )}
 
-        {/* STEP 2 ia — fotos */}
+        {/* STEP 2 ia - fotos */}
         {step === 2 && a.method === "ia" && (
           <>
             <h2><Camera size={18} style={{ verticalAlign: "-3px" }} /> Análise por Foto</h2>
@@ -2277,7 +2022,7 @@ function RecipesView({ recipes, foods, onAdd, onUpdate, onDel }) {
 
       <div className="panel" style={{ marginTop: 20 }} ref={formRef}>
         <h2>{editing ? "Editar receita" : "Nova receita"}</h2>
-        <p className="ph">Adicione os alimentos da receita. O sistema identifica automaticamente se cada um é fonte de carboidrato, proteína ou gordura — marque "à vontade" para itens fixos (ex.: salada), que não são escalados.</p>
+        <p className="ph">Adicione os alimentos da receita. O sistema identifica automaticamente se cada um é fonte de carboidrato, proteína ou gordura - marque "à vontade" para itens fixos (ex.: salada), que não são escalados.</p>
         <div className="row" style={{ marginBottom: 14 }}>
           <label className="lbl">Nome da receita *</label>
           <input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Lanche caseiro" />
@@ -2350,7 +2095,7 @@ function ExamsView({ patient, exams, onSave, onDel, onPickPatient }) {
   const sex = patient.sex === "Feminino" ? "F" : "M";
   const matches = q.trim() ? EXAM_CATALOG.filter((e) => e.n.toLowerCase().includes(q.toLowerCase())).slice(0, 8) : [];
   const pickCat = (c) => { setCat(c); setQ(c.n); setUnit(c.u); setOpen(false); };
-  const liveClass = cat ? classifyExam(cat, sex, result) : { status: "—", color: "var(--ink-soft)" };
+  const liveClass = cat ? classifyExam(cat, sex, result) : { status: "-", color: "var(--ink-soft)" };
   const rg = cat ? examRange(cat, sex) : null;
 
   const save = () => {
@@ -2405,7 +2150,7 @@ function ExamsView({ patient, exams, onSave, onDel, onPickPatient }) {
         </div>
         {cat && (
           <div className="infobox" style={{ background: "var(--green-soft)", border: "1px solid #cde8d8", color: "var(--ink)" }}>
-            Faixa de referência: <b>{rg ? `${rg[0]}–${rg[1]} ${cat.u}` : "—"}</b>
+            Faixa de referência: <b>{rg ? `${rg[0]}–${rg[1]} ${cat.u}` : "-"}</b>
             {result !== "" && <> · Classificação: <b style={{ color: liveClass.color }}>{liveClass.status}</b></>}
             <div style={{ color: "var(--ink-soft)", fontSize: 12.5, marginTop: 4 }}>{cat.note}</div>
           </div>
@@ -2448,7 +2193,7 @@ function ExamsView({ patient, exams, onSave, onDel, onPickPatient }) {
               </div>
               <div style={{ textAlign: "right", flexShrink: 0 }}>
                 <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 20 }}>{last?.result} <small style={{ fontSize: 11, color: "var(--ink-soft)" }}>{g.unit}</small></div>
-                {last?.status && last.status !== "—" && (
+                {last?.status && last.status !== "-" && (
                   <span style={{ fontSize: 11.5, padding: "2px 9px", borderRadius: 999, fontWeight: 700, background: statusBg, color: statusColor }}>{last.status}</span>
                 )}
               </div>
@@ -2461,7 +2206,7 @@ function ExamsView({ patient, exams, onSave, onDel, onPickPatient }) {
                 {g.entries.length > 1 && (
                   <div className="chartcard" style={{ marginBottom: 16 }}>
                     <div className="ct" style={{ marginBottom: 8 }}>
-                      <TrendingUp size={14} style={{ color: "var(--green)" }} /> Evolução — {g.name}
+                      <TrendingUp size={14} style={{ color: "var(--green)" }} /> Evolução - {g.name}
                       {g.ref && <span style={{ marginLeft: 8, fontSize: 12, color: "var(--ink-soft)", fontWeight: 400 }}>ref: {g.ref} {g.unit}</span>}
                     </div>
                     <MiniChart points={chartPoints} color={last?.color || "#1f9d63"} suffix={g.unit ? ` ${g.unit}` : ""} />
@@ -2473,13 +2218,13 @@ function ExamsView({ patient, exams, onSave, onDel, onPickPatient }) {
                 {[...g.entries].reverse().map((e) => (
                   <div key={e.id} className="exrow">
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 500 }}>{e.date ? new Date(e.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</div>
+                      <div style={{ fontWeight: 500 }}>{e.date ? new Date(e.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "-"}</div>
                       {g.ref && <div className="iqt">ref: {g.ref} {g.unit}</div>}
                     </div>
                     <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 18 }}>
                       {e.result} <small style={{ fontSize: 11, color: "var(--ink-soft)" }}>{g.unit}</small>
                     </div>
-                    {e.status && e.status !== "—" && (
+                    {e.status && e.status !== "-" && (
                       <span style={{ fontSize: 11.5, padding: "2px 9px", borderRadius: 999, fontWeight: 700, background: (e.color || "var(--ink-soft)") + "22", color: e.color || "var(--ink-soft)" }}>{e.status}</span>
                     )}
                     <button className="iconbtn" title="Excluir" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-soft)", padding: 4, marginLeft: 4 }} onClick={() => onDel(e.id)}><Trash2 size={14} /></button>
@@ -2518,7 +2263,7 @@ function AnamneseView({ patient, template, answers, onSaveAnswers, onSaveTemplat
   }
   const setA = (qid, v) => { const next = { ...ans, [qid]: v }; setAns(next); onSaveAnswers(next); };
 
-  const buildText = () => "Anamnese Nutricional — " + patient.name + "\n\n" +
+  const buildText = () => "Anamnese Nutricional - " + patient.name + "\n\n" +
     template.map((s) => s.title.toUpperCase() + "\n" + s.questions.map((q) => "- " + q.label + (q.options ? ` (${q.options.join(" / ")})` : "") + ":").join("\n")).join("\n\n");
   const copy = () => { try { navigator.clipboard.writeText(buildText()); setCopied(true); setTimeout(() => setCopied(false), 2500); } catch (e) {} };
 
@@ -2753,7 +2498,7 @@ function PhotoGallery({ photos, canDelete, onDelete }) {
   )
 }
 
-/* ── Portal do Paciente — visão do admin ──────────────────── */
+/* ── Portal do Paciente - visão do admin ──────────────────── */
 function PatientPortalAdmin({
   patient, nutritionistId, onSaveAppt, onBack,
   diets, onOpenDiet, onNewDiet, onDelDiet, onDuplicateDiet, onRenameDiet, onSetActiveDiet,
@@ -2829,7 +2574,7 @@ function PatientPortalAdmin({
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }}>
         <button className="btn sm ghost" onClick={onBack}><ArrowLeft size={16} /> Voltar</button>
-        <h1 className="title" style={{ margin: 0 }}>Portal — <span>{patient.name}</span></h1>
+        <h1 className="title" style={{ margin: 0 }}>Portal - <span>{patient.name}</span></h1>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
@@ -3019,7 +2764,7 @@ function PatientPortalAdmin({
             <div key={r.id} className="panel" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 16 }}>
               <Video size={20} style={{ color: '#1f9d63', flexShrink: 0 }} />
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>{r.preferred_date ? new Date(r.preferred_date + 'T12:00:00').toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' }) : '—'}</div>
+                <div style={{ fontWeight: 600 }}>{r.preferred_date ? new Date(r.preferred_date + 'T12:00:00').toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' }) : '-'}</div>
                 {r.message && <div style={{ color: '#5d6f66', fontSize: 13, marginTop: 2 }}>{r.message}</div>}
                 <div style={{ color: '#5d6f66', fontSize: 12, marginTop: 2 }}>{new Date(r.created_at).toLocaleDateString('pt-BR')}</div>
               </div>
@@ -3036,83 +2781,15 @@ function PatientPortalAdmin({
   )
 }
 
+/* Usa o mesmo template do Portal do Paciente (DietPrintBody), montado via
+   portal direto em document.body, para o PDF do nutricionista sair idêntico
+   ao PDF que o paciente baixa. */
 function PrintView({ diet, patient, profile }) {
-  const pr = profile || {};
-
-  return (
-    <div className="np-print">
-      {(pr.name || pr.clinic) && (
-        <div style={{ textAlign: "center", marginBottom: 4 }}>
-          <b style={{ fontSize: 16 }}>{pr.clinic || pr.name}</b>
-          {pr.name && pr.clinic ? <span> · {pr.name}</span> : null}
-          {pr.crn ? <span> · {pr.crn}</span> : null}
-        </div>
-      )}
-      <h1>Plano Alimentar Personalizado</h1>
-      <div style={{ display: "flex", justifyContent: "space-between", margin: "14px 0 4px" }}>
-        <b>Paciente: {patient?.name}</b><span>Data: {new Date().toLocaleDateString("pt-BR")}</span>
-      </div>
-      <hr style={{ marginBottom: 10 }} />
-
-      {diet.meals.filter((m) => m.items.length).map((m) => {
-        const mealSubs = (diet.mealSubs || {})[m.id] || [];
-        return (
-          <div key={m.id} className="print-section">
-            <div className="meal-title">{m.time} — {m.name}</div>
-            <table>
-              <thead><tr><th style={{ width: '65%' }}>Alimento</th><th>Porção</th></tr></thead>
-              <tbody>{m.items.map((it) => <tr key={it.id}><td>{it.name}</td><td>{it.label}</td></tr>)}</tbody>
-            </table>
-            {m.items.some((it) => (diet.subs || {})[it.foodId || it.name]?.length > 0) && (
-              <div className="subs-box">
-                <p className="subs-label">Substituições de ingredientes</p>
-                <table className="subs-table">
-                  <tbody>
-                    {m.items.filter((it) => (diet.subs || {})[it.foodId || it.name]?.length > 0).map((it) => (
-                      <tr key={it.id}>
-                        <td style={{ width: '40%' }}>• {it.name}</td>
-                        <td>pode substituir por: {joinOr(diet.subs[it.foodId || it.name])}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            {mealSubs.map((rs, i) => (
-              <div className="recipe-box" key={'r' + i}>
-                <p className="recipe-head">🍽️ Substituir a refeição inteira por: {rs.name}</p>
-                <table className="subs-table">
-                  <tbody>
-                    {rs.items.map((it, j) => (
-                      <tr key={j}>
-                        <td style={{ width: '60%' }}>• {it.name}</td>
-                        <td>{it.role === 'free' ? 'à vontade' : `${it.scaledGrams}g`}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
-          </div>
-        );
-      })}
-
-      {(diet.supplements || []).length > 0 && (
-        <div className="print-section">
-          <div className="meal-title">Suplementação</div>
-          <table>
-            <thead><tr><th style={{ width: '50%' }}>Suplemento</th><th>Dose</th><th>Horário</th></tr></thead>
-            <tbody>{diet.supplements.map((s, i) => <tr key={i}><td>{s.name}</td><td>{s.dose}</td><td>{s.time}</td></tr>)}</tbody>
-          </table>
-        </div>
-      )}
-
-      {diet.note?.trim() && (
-        <div className="print-section">
-          <div className="meal-title">Observação</div>
-          <p style={{ whiteSpace: "pre-wrap" }}>{diet.note.trim()}</p>
-        </div>
-      )}
-    </div>
+  return createPortal(
+    <div className="dp-print" style={{ display: "none" }}>
+      <style>{DIET_PRINT_STYLE}</style>
+      <DietPrintBody diet={diet} patient={patient} profile={profile} />
+    </div>,
+    document.body
   );
 }
