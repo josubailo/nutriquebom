@@ -536,6 +536,58 @@ const itemMacros = (it) => {
 const sumMacros = (items) =>
   items.reduce((a, it) => { const m = itemMacros(it); return { kcal: a.kcal + m.kcal, p: a.p + m.p, c: a.c + m.c, f: a.f + m.f, fib: a.fib + m.fib }; }, { kcal: 0, p: 0, c: 0, f: 0, fib: 0 });
 
+/* ── Classificação automática do macronutriente dominante de um alimento ── */
+const dominantRole = (per100) => {
+  const p = +per100?.p || 0, c = +per100?.c || 0, f = +per100?.f || 0;
+  const pCal = p * 4, cCal = c * 4, fCal = f * 9;
+  if (pCal === 0 && cCal === 0 && fCal === 0) return "free";
+  if (pCal >= cCal && pCal >= fCal) return "protein";
+  if (cCal >= pCal && cCal >= fCal) return "carb";
+  return "fat";
+};
+
+/* Arredonda para um número "redondo" (múltiplo de 5), evitando algo como 99g */
+const roundNice = (g) => {
+  if (!g || g <= 0) return 0;
+  return Math.max(5, Math.round(g / 5) * 5);
+};
+
+/* Soma, por papel (carb/protein/fat), os gramas do macro correspondente nos itens informados */
+const macroTargetsByRole = (items) => {
+  const t = { carb: 0, protein: 0, fat: 0 };
+  items.forEach((it) => {
+    const per100 = it.per100 || { kcal: 0, p: 0, c: 0, f: 0, fib: 0 };
+    const role = dominantRole(per100);
+    const grams = +it.grams || 0;
+    if (role === "carb") t.carb += (per100.c || 0) * grams / 100;
+    else if (role === "protein") t.protein += (per100.p || 0) * grams / 100;
+    else if (role === "fat") t.fat += (per100.f || 0) * grams / 100;
+  });
+  return t;
+};
+
+/* Escala os ingredientes de uma receita para atingir os mesmos gramas de carb/proteína/gordura
+   que a refeição original, mantendo itens "à vontade" (sem papel definido) sem escalar. */
+const scaleRecipeToTargets = (recipe, targets) => {
+  const items = recipe.items || [];
+  const recipeTotals = { carb: 0, protein: 0, fat: 0 };
+  items.forEach((it) => {
+    const role = it.role || dominantRole(it.per100);
+    const grams = +it.grams || 0;
+    if (role === "carb") recipeTotals.carb += (it.per100?.c || 0) * grams / 100;
+    else if (role === "protein") recipeTotals.protein += (it.per100?.p || 0) * grams / 100;
+    else if (role === "fat") recipeTotals.fat += (it.per100?.f || 0) * grams / 100;
+  });
+  return items.map((it) => {
+    const role = it.role || dominantRole(it.per100);
+    if (role === "free") return { ...it, scaledGrams: null };
+    const recipeRoleTotal = recipeTotals[role];
+    const target = targets[role];
+    const factor = recipeRoleTotal > 0 && target > 0 ? target / recipeRoleTotal : 1;
+    return { ...it, scaledGrams: roundNice((+it.grams || 0) * factor) };
+  });
+};
+
 const MICRO_KEYS = ["ca", "fe", "mg", "k", "na", "zn", "va", "vc", "b6", "vd", "b12", "ve"];
 const sumMicros = (items) =>
   items.reduce((a, it) => { const k = it.grams / 100; const mc = it.mc || {}; MICRO_KEYS.forEach((m) => { a[m] = (a[m] || 0) + (mc[m] || 0) * k; }); return a; }, {});
@@ -678,6 +730,7 @@ export default function App() {
         profile:          remote.profile || {},
         anamneseTemplate: remote.anamneseTemplate || DEFAULT_ANAMNESE,
         foods:            [...seedFoods(), ...customFoods],
+        recipes:          remote.recipes || [],
       }));
       setLoaded(true);
     });
@@ -815,6 +868,22 @@ export default function App() {
   };
   const allFoods = foods;
 
+  const recipes   = data.recipes || [];
+  const addRecipe = (r) => {
+    const novo = { id: uid(), ...r };
+    setData((d) => ({ ...d, recipes: [novo, ...(d.recipes || [])] }));
+    db.insertRecipe(user.id, novo);
+  };
+  const updateRecipe = (id, patch) => {
+    setData((d) => ({ ...d, recipes: (d.recipes || []).map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
+    const updated = (data.recipes || []).find((x) => x.id === id);
+    if (updated) db.updateRecipe(user.id, { ...updated, ...patch });
+  };
+  const delRecipe = (id) => {
+    setData((d) => ({ ...d, recipes: (d.recipes || []).filter((x) => x.id !== id) }));
+    db.deleteRecipe(user.id, id);
+  };
+
   /* ── Render guards ── */
   const ADMIN_EMAIL = 'josuebailonutri@gmail.com';
   if (authLoading) return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', fontFamily: 'sans-serif', color: '#5d6f66' }}>Carregando…</div>;
@@ -851,6 +920,7 @@ export default function App() {
           <button className={"navitem" + (view === "patients" ? " active" : "")} onClick={() => setView("patients")}><Users size={18} /> Meus Pacientes</button>
           <button className={"navitem" + (view === "agenda" ? " active" : "")} onClick={() => setView("agenda")}><CalendarDays size={18} /> Minha Agenda</button>
           <button className={"navitem" + (view === "myfoods" ? " active" : "")} onClick={() => setView("myfoods")}><Apple size={18} /> Meus Alimentos</button>
+          <button className={"navitem" + (view === "recipes" ? " active" : "")} onClick={() => setView("recipes")}><ClipboardList size={18} /> Receitas</button>
           <button className={"navitem" + (view === "profile" ? " active" : "")} onClick={() => setView("profile")}><UserCircle size={18} /> Perfil</button>
 
           {activePatient && view !== "portal" && (
@@ -900,12 +970,13 @@ export default function App() {
             /> :
             view === "agenda" ? <AgendaView patients={patients} /> :
             view === "myfoods" ? <MyFoodsView foods={foods} onAdd={addFood} onUpdate={updateFood} onDel={delFood} /> :
+            view === "recipes" ? <RecipesView recipes={recipes} foods={allFoods} onAdd={addRecipe} onUpdate={updateRecipe} onDel={delRecipe} /> :
             view === "assessment" ? <AssessmentView patient={activePatient} assessments={assessOf(activePatient?.id)} onSave={(a) => saveAssessment(activePatient.id, a)} onDel={(aid) => delAssessment(activePatient.id, aid)} onPickPatient={() => setView("patients")} /> :
             view === "exams" ? <ExamsView patient={activePatient} exams={examsOf(activePatient?.id)} onSave={(e) => saveExam(activePatient.id, e)} onDel={(eid) => delExam(activePatient.id, eid)} onPickPatient={() => setView("patients")} /> :
             view === "anamnese" ? <AnamneseView key={activePatient?.id} patient={activePatient} template={data.anamneseTemplate || DEFAULT_ANAMNESE} answers={anamneseOf(activePatient?.id)} onSaveAnswers={(a) => saveAnamnese(activePatient.id, a)} onSaveTemplate={saveTemplate} onPickPatient={() => setView("patients")} /> :
             view === "profile" ? <ProfileView profile={data.profile || {}} onSave={saveProfile} /> :
             view === "history" ? <HistoryView patient={activePatient} diets={dietsOf(activePatient?.id)} onOpen={(d) => openDiet(activePatient, d)} onNew={() => openNewDiet(activePatient)} onDel={(did) => delDiet(activePatient.id, did)} onDuplicate={(d) => { const copy = { ...JSON.parse(JSON.stringify(d)), id: uid(), name: d.name + " (cópia)", createdAt: Date.now(), active: false }; saveDiet(activePatient.id, copy); }} onRename={(did, name) => { const diet = dietsOf(activePatient.id).find(x => x.id === did); if (diet) saveDiet(activePatient.id, { ...diet, name }); }} onSetActive={(did) => { dietsOf(activePatient.id).forEach(d => saveDiet(activePatient.id, { ...d, active: d.id === did })); }} /> :
-            view === "builder" ? <Builder patient={activePatient} diet={activeDiet} setDiet={setActiveDiet} foods={allFoods} profile={data.profile || {}} onSave={() => { saveDiet(activePatient.id, activeDiet); setView("history"); }} onBack={() => setView("history")} /> :
+            view === "builder" ? <Builder patient={activePatient} diet={activeDiet} setDiet={setActiveDiet} foods={allFoods} recipes={recipes} profile={data.profile || {}} onSave={() => { saveDiet(activePatient.id, activeDiet); setView("history"); }} onBack={() => setView("history")} /> :
             null}
         </main>
       </div>
@@ -1189,7 +1260,7 @@ function SaveDietModal({ onSave, onClose }) {
 }
 
 /* ---------- Builder ---------- */
-function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
+function Builder({ patient, diet, setDiet, onSave, onBack, foods, recipes, profile }) {
   const [foodModal, setFoodModal] = useState(null); // {mealId}
   const [saveModal, setSaveModal] = useState(false);
   const [renameItem, setRenameItem] = useState(null); // {mealId, itemId, val}
@@ -1432,6 +1503,16 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, profile }) {
                   </div>
                 </div>
               ))}
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--line)' }}>
+                <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', marginBottom: 6 }}>Substituir a refeição inteira por uma receita:</div>
+                {((diet.mealSubs || {})[meal.id] || []).map((rs, i) => (
+                  <div className="chip" key={i} style={{ display: 'inline-flex', alignItems: 'flex-start', maxWidth: 480, height: 'auto', whiteSpace: 'normal', padding: '8px 10px' }}>
+                    <span><b>{rs.name}</b>: {rs.items.map((it) => it.role === 'free' ? cleanName(it.name) : `${cleanName(it.name)} ${it.scaledGrams}g`).join(', ')}</span>
+                    <button onClick={() => setDiet((d) => ({ ...d, mealSubs: { ...(d.mealSubs || {}), [meal.id]: ((d.mealSubs || {})[meal.id] || []).filter((_, j) => j !== i) } }))}><X size={13} /></button>
+                  </div>
+                ))}
+                <RecipeMealSubAdder recipes={recipes} mealItems={meal.items} onAdd={(rs) => setDiet((d) => ({ ...d, mealSubs: { ...(d.mealSubs || {}), [meal.id]: [...((d.mealSubs || {})[meal.id] || []), rs] } }))} />
+              </div>
             </div>
           ))}
       </div>
@@ -1544,6 +1625,36 @@ function SubAdder({ foods, baseKcal, onAdd }) {
         )}
         <button className="btn sm" disabled={!sel || !grams} onClick={add}><Plus size={14} /> Adicionar</button>
       </div>
+    </div>
+  );
+}
+
+function RecipeMealSubAdder({ recipes, mealItems, onAdd }) {
+  const [recipeId, setRecipeId] = useState("");
+  const targets = useMemo(() => macroTargetsByRole(mealItems), [mealItems]);
+  const recipe = recipes.find((r) => r.id === recipeId);
+  const scaled = recipe ? scaleRecipeToTargets(recipe, targets) : null;
+
+  const add = () => {
+    if (!recipe || !scaled) return;
+    onAdd({ recipeId: recipe.id, name: recipe.name, items: scaled.map((it) => ({ name: it.name, role: it.role, scaledGrams: it.scaledGrams })) });
+    setRecipeId("");
+  };
+
+  if (!recipes.length) return <div style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>Nenhuma receita cadastrada ainda. Crie em “Receitas”.</div>;
+
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', maxWidth: 560 }}>
+      <select className="field" style={{ flex: 1, minWidth: 180 }} value={recipeId} onChange={(e) => setRecipeId(e.target.value)}>
+        <option value="">Selecione uma receita…</option>
+        {recipes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+      </select>
+      <button className="btn sm" disabled={!recipe} onClick={add}><Plus size={14} /> Adicionar</button>
+      {recipe && scaled && (
+        <div style={{ fontSize: 12.5, color: 'var(--green-d)', width: '100%' }}>
+          ≈ {scaled.map((it) => it.role === 'free' ? cleanName(it.name) : `${cleanName(it.name)} ${it.scaledGrams}g`).join(', ')}
+        </div>
+      )}
     </div>
   );
 }
@@ -2034,6 +2145,154 @@ function MyFoodsView({ foods, onAdd, onUpdate, onDel }) {
               <div className="imac">{r0(x.kcal)} kcal · P{r1(x.p)} C{r1(x.c)} G{r1(x.f)} Fib{r1(x.fib || 0)}</div>
               <button className="iconbtn" title="Editar" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-soft)", padding: 4 }} onClick={() => startEdit(x)}><Pencil size={15} /></button>
               <button className="iconbtn" title="Excluir" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-soft)", padding: 4 }} onClick={() => onDel(x.id)}><Trash2 size={15} /></button>
+            </div>
+          ))}
+      </div>
+    </>
+  );
+}
+
+const ROLE_LABELS = { carb: "Carboidrato", protein: "Proteína", fat: "Gordura", free: "Livre (à vontade)" };
+const ROLE_COLORS = { carb: "#e8c84a", protein: "#e07878", fat: "#8a9a90", free: "#5d6f66" };
+
+function RecipeIngredientAdder({ foods, onAdd }) {
+  const [query, setQuery] = useState("");
+  const [sel, setSel] = useState(null);
+  const [grams, setGrams] = useState("");
+  const [role, setRole] = useState(null);
+  const [isFree, setIsFree] = useState(false);
+
+  const results = useMemo(() => {
+    if (sel || !query.trim()) return [];
+    const q = query.trim().toLowerCase();
+    return foods.filter((f) => f.n.toLowerCase().includes(q)).slice(0, 8);
+  }, [query, sel, foods]);
+
+  const pickFood = (f) => {
+    setSel(f); setQuery("");
+    setRole(dominantRole(f));
+  };
+
+  const reset = () => { setSel(null); setQuery(""); setGrams(""); setRole(null); setIsFree(false); };
+
+  const add = () => {
+    if (!sel) return;
+    if (!isFree && !(+grams > 0)) return;
+    onAdd({
+      foodId: sel.id, name: sel.n,
+      per100: { kcal: sel.kcal, p: sel.p, c: sel.c, f: sel.f, fib: sel.fib || 0 },
+      grams: isFree ? null : +grams,
+      role: isFree ? "free" : role,
+    });
+    reset();
+  };
+
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", position: "relative", marginTop: 10 }}>
+      <input
+        className="field"
+        style={{ flex: 2, minWidth: 180 }}
+        placeholder="Buscar alimento…"
+        value={sel ? sel.n : query}
+        onChange={(e) => { setSel(null); setQuery(e.target.value); }}
+      />
+      {results.length > 0 && (
+        <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 20, background: "#fff", border: "1px solid var(--line)", borderRadius: 8, marginTop: 4, width: 280, maxHeight: 220, overflowY: "auto", boxShadow: "0 4px 14px rgba(0,0,0,.08)" }}>
+          {results.map((f) => (
+            <div key={f.id} style={{ padding: "8px 12px", cursor: "pointer", fontSize: 13, borderBottom: "1px solid #f3f3f3" }} onClick={() => pickFood(f)}>
+              {f.n} <span style={{ fontSize: 11, opacity: .6 }}>({f.kcal} kcal/100g)</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {sel && (
+        <>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+            <input type="checkbox" checked={isFree} onChange={(e) => setIsFree(e.target.checked)} /> à vontade
+          </label>
+          {!isFree && (
+            <input className="field" style={{ width: 100 }} type="number" placeholder="Gramas" value={grams} onChange={(e) => setGrams(e.target.value)} />
+          )}
+          {!isFree && (
+            <select className="field" style={{ width: 150 }} value={role || ""} onChange={(e) => setRole(e.target.value)}>
+              {Object.entries(ROLE_LABELS).filter(([k]) => k !== "free").map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          )}
+          <button className="btn sm" onClick={add}><Plus size={14} /> Adicionar</button>
+          <button className="btn sm ghost" onClick={reset}>Cancelar</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function RecipesView({ recipes, foods, onAdd, onUpdate, onDel }) {
+  const [editing, setEditing] = useState(null);
+  const [name, setName] = useState("");
+  const [items, setItems] = useState([]);
+  const formRef = useRef(null);
+
+  const cancel = () => { setEditing(null); setName(""); setItems([]); };
+
+  const startEdit = (r) => {
+    setEditing(r.id); setName(r.name); setItems(r.items || []);
+    if (formRef.current) formRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const submit = () => {
+    if (!name.trim() || items.length === 0) return;
+    const recipe = { name: name.trim(), items };
+    if (editing) onUpdate(editing, recipe); else onAdd(recipe);
+    cancel();
+  };
+
+  return (
+    <>
+      <h1 className="title">Receitas <span>de Substituição</span></h1>
+      <p className="sub">Monte combinações (ex.: hambúrguer + pão + salada) para usar como substituição de uma refeição inteira. As quantidades de cada item são ajustadas automaticamente para bater com os macros da refeição original.</p>
+
+      <div className="panel" style={{ marginTop: 20 }} ref={formRef}>
+        <h2>{editing ? "Editar receita" : "Nova receita"}</h2>
+        <p className="ph">Identifique cada item como fonte de carboidrato, proteína ou gordura — ou marque "à vontade" para itens fixos (ex.: salada), que não são escalados.</p>
+        <div className="row" style={{ marginBottom: 14 }}>
+          <label className="lbl">Nome da receita *</label>
+          <input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Lanche caseiro" />
+        </div>
+
+        {items.length > 0 && (
+          <div style={{ marginBottom: 10 }}>
+            {items.map((it, i) => (
+              <div className="item" key={i}>
+                <div style={{ flex: 1 }}>
+                  <div className="inm">{cleanName(it.name)}</div>
+                  <div className="iqt">{it.role === "free" ? "à vontade" : `${it.grams}g`}</div>
+                </div>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: "#fff", background: ROLE_COLORS[it.role], padding: "3px 9px", borderRadius: 999 }}>{ROLE_LABELS[it.role]}</span>
+                <button className="iconbtn" title="Remover" onClick={() => setItems((arr) => arr.filter((_, j) => j !== i))}><Trash2 size={15} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <RecipeIngredientAdder foods={foods} onAdd={(it) => setItems((arr) => [...arr, it])} />
+
+        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+          <button className="btn" disabled={!name.trim() || items.length === 0} onClick={submit}>{editing ? <><Save size={16} /> Salvar alterações</> : <><Plus size={17} /> Criar receita</>}</button>
+          {editing && <button className="btn ghost" onClick={cancel}>Cancelar</button>}
+        </div>
+      </div>
+
+      <div className="panel">
+        <h2 style={{ marginBottom: 12 }}>Cadastradas ({recipes.length})</h2>
+        {recipes.length === 0 ? <div className="empty" style={{ padding: 30 }}><ClipboardList size={36} style={{ opacity: .4 }} /><p>Nenhuma receita cadastrada ainda.</p></div> :
+          recipes.map((r) => (
+            <div className="item" key={r.id}>
+              <div style={{ flex: 1 }}>
+                <div className="inm">{r.name}</div>
+                <div className="iqt">{(r.items || []).map((it) => it.role === "free" ? cleanName(it.name) : `${cleanName(it.name)} ${it.grams}g`).join(" · ")}</div>
+              </div>
+              <button className="iconbtn" title="Editar" onClick={() => startEdit(r)}><Pencil size={15} /></button>
+              <button className="iconbtn" title="Excluir" onClick={() => onDel(r.id)}><Trash2 size={15} /></button>
             </div>
           ))}
       </div>
@@ -2755,6 +3014,8 @@ function PrintView({ diet, patient, profile }) {
   (diet.meals || []).forEach(m => m.items.forEach(it => { foodNames[it.foodId || it.id] = it.name || it.foodId; }));
 
   const subsEntries = Object.entries(diet.subs || {}).filter(([, subs]) => subs && subs.length > 0);
+  const mealSubsEntries = (diet.meals || []).filter((m) => (diet.mealSubs || {})[m.id]?.length > 0);
+  const recipeLabel = (rs) => rs.items.map((it) => it.role === 'free' ? it.name : `${it.name} ${it.scaledGrams}g`).join(', ');
 
   return (
     <div className="np-print">
@@ -2802,6 +3063,25 @@ function PrintView({ diet, patient, profile }) {
                   <td style={{ fontWeight: 600 }}>{foodNames[foodId] || foodId}</td>
                   <td>{joinOr(subs)}</td>
                 </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {mealSubsEntries.length > 0 && (
+        <div className="print-section">
+          <div className="meal-title">🍽️ Substituições de Refeição Inteira</div>
+          <table>
+            <thead><tr><th style={{ width: '40%' }}>Refeição</th><th>Pode substituir por</th></tr></thead>
+            <tbody>
+              {mealSubsEntries.map((m) => (
+                (diet.mealSubs[m.id] || []).map((rs, i) => (
+                  <tr key={m.id + i}>
+                    <td style={{ fontWeight: 600 }}>{m.name}</td>
+                    <td><b>{rs.name}</b>: {recipeLabel(rs)}</td>
+                  </tr>
+                ))
               ))}
             </tbody>
           </table>

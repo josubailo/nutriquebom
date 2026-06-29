@@ -15,6 +15,7 @@ export async function loadAll(nutritionistId) {
     { data: appointments },
     { data: customFoods },
     { data: settings },
+    { data: recipeRows },
   ] = await Promise.all([
     supabase.from('patients').select('*').eq('nutritionist_id', nutritionistId).order('created_at', { ascending: false }),
     supabase.from('diets').select('*').eq('nutritionist_id', nutritionistId),
@@ -24,6 +25,7 @@ export async function loadAll(nutritionistId) {
     supabase.from('appointments').select('*').eq('nutritionist_id', nutritionistId),
     supabase.from('custom_foods').select('*').eq('nutritionist_id', nutritionistId),
     supabase.from('nutritionist_settings').select('*').eq('id', nutritionistId).maybeSingle(),
+    supabase.from('recipes').select('*').eq('nutritionist_id', nutritionistId),
   ])
 
   // Reconstrói o shape que o App.jsx espera
@@ -60,6 +62,7 @@ export async function loadAll(nutritionistId) {
     customFoods: (customFoods || []).map(f => ({ ...f.data, id: f.id })),
     profile: settings?.profile_data || {},
     anamneseTemplate: settings?.anamnese_template || null,
+    recipes: (recipeRows || []).map(r => ({ ...r.data, id: r.id, name: r.name })),
   }
 }
 
@@ -183,6 +186,28 @@ export async function updateFood(nutritionistId, food) {
 export async function deleteFood(nutritionistId, foodId) {
   await supabase.from('custom_foods').delete()
     .eq('id', foodId).eq('nutritionist_id', nutritionistId)
+}
+
+// ── Receitas (substituições de refeição inteira) ─────────────
+export async function insertRecipe(nutritionistId, recipe) {
+  const { id, name, ...rest } = recipe
+  await supabase.from('recipes').insert({
+    id,
+    nutritionist_id: nutritionistId,
+    name: name || 'Receita',
+    data: rest,
+  })
+}
+
+export async function updateRecipe(nutritionistId, recipe) {
+  const { id, name, ...rest } = recipe
+  await supabase.from('recipes').update({ name: name || 'Receita', data: rest })
+    .eq('id', id).eq('nutritionist_id', nutritionistId)
+}
+
+export async function deleteRecipe(nutritionistId, recipeId) {
+  await supabase.from('recipes').delete()
+    .eq('id', recipeId).eq('nutritionist_id', nutritionistId)
 }
 
 // ── Configurações ────────────────────────────────────────────

@@ -15,6 +15,7 @@ import { StackedBarChart, AssessComparisonTable } from './assessShared'
 const cleanName = (n) => (n || '').replace(/\s+/g, ' ').trim()
 // junta uma lista de substitutos em texto legível: "A ou B" / "A, B ou C"
 const subLabel = (s) => typeof s === 'string' ? s : `${s.name} (${s.grams}g)`
+const recipeSubLabel = (rs) => rs.items.map((it) => it.role === 'free' ? it.name : `${it.name} ${it.scaledGrams}g`).join(', ')
 
 const joinOr = (arr) => {
   if (!arr || arr.length === 0) return ''
@@ -241,6 +242,12 @@ function PtDiets({ diets, patient }) {
                           )
                         })}
                       </div>
+                      {((diet.mealSubs || {})[meal.id] || []).map((rs, i) => (
+                        <div key={i} className="iqt" style={{ display: 'flex', alignItems: 'flex-start', gap: 5, marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--line)' }}>
+                          <Repeat size={11} style={{ flexShrink: 0, marginTop: 2 }} />
+                          <span>Substituir a refeição toda por <b>{rs.name}</b>: {recipeSubLabel(rs)}</span>
+                        </div>
+                      ))}
                     </div>
                   ))}
 
@@ -303,6 +310,9 @@ function PrintDiet({ diet, patient }) {
               })}
             </tbody>
           </table>
+          {((diet.mealSubs || {})[meal.id] || []).map((rs, i) => (
+            <div key={i} className="pp-subs" style={{ marginTop: 4 }}><Repeat size={10} /> Substituir a refeição toda por <b>{rs.name}</b>: {recipeSubLabel(rs)}</div>
+          ))}
         </div>
       ))}
       {(diet.supplements || []).length > 0 && (
