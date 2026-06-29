@@ -41,12 +41,14 @@ export const DIET_PRINT_STYLE = `
   .dp-table td { padding: 9px 0; font-size: 13px; text-align: center; border-bottom: 1px solid #e4e9e3; }
   .dp-table tr:last-child td { border-bottom: none; }
   .dp-table td:last-child { color: #5d6f66; }
-  .dp-subs, .dp-recipe { width: 100%; border-collapse: collapse; margin-top: 4px; }
-  .dp-subs tr:first-child td, .dp-recipe tr:first-child td { padding-top: 7px; }
-  .dp-subs { border-top: 1px dashed #cfd8d2; }
-  .dp-recipe { border-top: 1px solid #cde8d8; }
-  .dp-subs td, .dp-recipe td { font-size: 10.5px; color: #7a8f84; padding: 3px 4px; text-align: center; }
-  .dp-subs td:first-child { width: 42%; }
+  .dp-inline-sub {
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+    font-size: 10.5px; color: #7a8f84; margin-top: 4px;
+  }
+  .dp-inline-sub svg { flex-shrink: 0; }
+  .dp-recipe { width: 100%; border-collapse: collapse; margin-top: 4px; border-top: 1px solid #cde8d8; }
+  .dp-recipe tr:first-child td { padding-top: 7px; }
+  .dp-recipe td { font-size: 10.5px; color: #7a8f84; padding: 3px 4px; text-align: center; }
   .dp-recipe .dp-recipe-title { color: #157a4c; font-weight: 700; }
   .dp-sups { margin-top: 4px; page-break-inside: avoid; }
   .dp-note { margin-top: 16px; }

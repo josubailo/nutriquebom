@@ -1,6 +1,6 @@
 /* ── Corpo do PDF do plano alimentar - compartilhado entre o
    Builder (nutricionista) e o Portal do Paciente ────────────────── */
-import { Utensils, Clock, Pill, ClipboardList } from 'lucide-react';
+import { Utensils, Clock, Pill, ClipboardList, Repeat } from 'lucide-react';
 
 const cleanName = (n) => (n || '').replace(/\s+/g, ' ').trim();
 const subLabel = (s) => typeof s === 'string' ? s : `${s.name} (${s.grams}g)`;
@@ -31,7 +31,6 @@ export function DietPrintBody({ diet, patient, profile }) {
       </div>
 
       {meals.map((meal) => {
-        const ingredientSubs = meal.items.filter((it) => (diet.subs || {})[it.foodId || it.name]?.length > 0);
         const mealSubs = (diet.mealSubs || {})[meal.id] || [];
         return (
           <div className="dp-meal" key={meal.id}>
@@ -43,24 +42,22 @@ export function DietPrintBody({ diet, patient, profile }) {
               <table className="dp-table">
                 <thead><tr><th>Alimento</th><th>Porção</th></tr></thead>
                 <tbody>
-                  {meal.items.map((it, i) => (
-                    <tr key={it.id || i}><td>{cleanName(it.name)}</td><td>{it.label || `${it.grams}g`}</td></tr>
-                  ))}
+                  {meal.items.map((it, i) => {
+                    const subs = (diet.subs || {})[it.foodId || it.name] || [];
+                    return (
+                      <tr key={it.id || i}>
+                        <td>
+                          {cleanName(it.name)}
+                          {subs.length > 0 && (
+                            <div className="dp-inline-sub"><Repeat size={11} /> Substituir por: {joinOr(subs)}</div>
+                          )}
+                        </td>
+                        <td>{it.label || `${it.grams}g`}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-
-              {ingredientSubs.length > 0 && (
-                <table className="dp-subs">
-                  <tbody>
-                    {ingredientSubs.map((it) => (
-                      <tr key={it.id}>
-                        <td>• {cleanName(it.name)}</td>
-                        <td>pode substituir por: {joinOr(diet.subs[it.foodId || it.name])}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
 
               {mealSubs.map((rs, i) => (
                 <table className="dp-recipe" key={i}>
