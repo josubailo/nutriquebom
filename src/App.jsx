@@ -264,8 +264,13 @@ const _STYLE_START = `
   .np-print .meal-title { background:#1f9d63; color:#fff; padding:8px 14px; border-radius:8px; font-weight:700; margin:18px 0 0; }
   .np-print table { width:100%; border-collapse:collapse; }
   .np-print td, .np-print th { padding:7px 10px; text-align:left; border-bottom:1px solid #e4e9e3; font-size:13px; }
-  .np-print .subs-table { margin-top:4px; }
-  .np-print .subs-table td { padding:4px 8px; font-size:11px; color:#666; border-bottom:1px solid #f0f0f0; }
+  .np-print .subs-box { margin-top:8px; padding:8px 10px 10px; background:#f7f9f7; border:1px solid #e4e9e3; border-radius:8px; }
+  .np-print .subs-label { font-size:9.5px; text-transform:uppercase; letter-spacing:.04em; color:#1f9d63; font-weight:700; margin:0 0 4px; }
+  .np-print .subs-table { width:100%; border-collapse:collapse; }
+  .np-print .subs-table td { padding:3px 6px; font-size:10px; color:#555; border-bottom:1px solid #e9eee8; }
+  .np-print .subs-table tr:last-child td { border-bottom:none; }
+  .np-print .recipe-box { margin-top:8px; padding:6px 10px 10px; background:#eef7f1; border:1px solid #cde8d8; border-radius:8px; }
+  .np-print .recipe-head { font-size:11px; font-weight:700; color:#157a4c; margin:2px 0 6px; }
 }
 `; // _STYLE_START (não usado — mantido apenas como referência histórica)
 const STYLE = NP_STYLE;
@@ -3033,7 +3038,6 @@ function PatientPortalAdmin({
 
 function PrintView({ diet, patient, profile }) {
   const pr = profile || {};
-  const recipeLabel = (rs) => rs.items.map((it) => it.role === 'free' ? it.name : `${it.name} ${it.scaledGrams}g`).join(', ');
 
   return (
     <div className="np-print">
@@ -3059,24 +3063,36 @@ function PrintView({ diet, patient, profile }) {
               <thead><tr><th style={{ width: '65%' }}>Alimento</th><th>Porção</th></tr></thead>
               <tbody>{m.items.map((it) => <tr key={it.id}><td>{it.name}</td><td>{it.label}</td></tr>)}</tbody>
             </table>
-            {(m.items.some((it) => (diet.subs || {})[it.foodId || it.name]?.length > 0) || mealSubs.length > 0) && (
-              <table className="subs-table">
-                <tbody>
-                  {m.items.filter((it) => (diet.subs || {})[it.foodId || it.name]?.length > 0).map((it) => (
-                    <tr key={it.id}>
-                      <td style={{ width: '40%' }}>• {it.name}</td>
-                      <td>pode substituir por: {joinOr(diet.subs[it.foodId || it.name])}</td>
-                    </tr>
-                  ))}
-                  {mealSubs.map((rs, i) => (
-                    <tr key={'r' + i}>
-                      <td style={{ width: '40%' }}>• Refeição inteira</td>
-                      <td>substituir por <b>{rs.name}</b>: {recipeLabel(rs)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {m.items.some((it) => (diet.subs || {})[it.foodId || it.name]?.length > 0) && (
+              <div className="subs-box">
+                <p className="subs-label">Substituições de ingredientes</p>
+                <table className="subs-table">
+                  <tbody>
+                    {m.items.filter((it) => (diet.subs || {})[it.foodId || it.name]?.length > 0).map((it) => (
+                      <tr key={it.id}>
+                        <td style={{ width: '40%' }}>• {it.name}</td>
+                        <td>pode substituir por: {joinOr(diet.subs[it.foodId || it.name])}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
+            {mealSubs.map((rs, i) => (
+              <div className="recipe-box" key={'r' + i}>
+                <p className="recipe-head">🍽️ Substituir a refeição inteira por: {rs.name}</p>
+                <table className="subs-table">
+                  <tbody>
+                    {rs.items.map((it, j) => (
+                      <tr key={j}>
+                        <td style={{ width: '60%' }}>• {it.name}</td>
+                        <td>{it.role === 'free' ? 'à vontade' : `${it.scaledGrams}g`}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
           </div>
         );
       })}
