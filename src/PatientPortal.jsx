@@ -180,30 +180,32 @@ function PtDiets({ diets, patient }) {
                         <span className="time"><Clock size={13} /> {meal.time}</span>
                       </div>
                       <div className="meal-body">
-                        {meal.items.map((it, i) => {
-                          const subs = (diet.subs || {})[it.foodId || it.name] || []
-                          return (
-                            <div className="item" key={i} style={{ alignItems: subs.length ? 'flex-start' : 'center' }}>
-                              <div style={{ flex: 1 }}>
-                                <div className="inm">{cleanName(it.name) || it.foodId}</div>
-                                {subs.length > 0 && (
-                                  <div className="iqt" style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 3 }}>
-                                    <Repeat size={11} style={{ flexShrink: 0 }} />
-                                    <span>Substituir por: {joinOr(subs)}</span>
-                                  </div>
-                                )}
+                        <div style={{ maxWidth: 440, margin: '0 auto' }}>
+                          {meal.items.map((it, i) => {
+                            const subs = (diet.subs || {})[it.foodId || it.name] || []
+                            return (
+                              <div className="item" key={i} style={{ alignItems: subs.length ? 'flex-start' : 'center' }}>
+                                <div style={{ flex: 1, textAlign: 'center' }}>
+                                  <div className="inm">{cleanName(it.name) || it.foodId}</div>
+                                  {subs.length > 0 && (
+                                    <div className="iqt" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, flexWrap: 'wrap', marginTop: 3 }}>
+                                      <Repeat size={11} style={{ flexShrink: 0 }} />
+                                      <span>Substituir por: {joinOr(subs)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="imac" style={{ flex: 1, marginLeft: 0, textAlign: 'center' }}>{it.label || `${it.grams}g`}</div>
                               </div>
-                              <div className="imac">{it.label || `${it.grams}g`}</div>
+                            )
+                          })}
+                          {((diet.mealSubs || {})[meal.id] || []).map((rs, i) => (
+                            <div key={i} className="iqt" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', textAlign: 'center', gap: 5, marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--line)' }}>
+                              <Repeat size={11} style={{ flexShrink: 0, marginTop: 2 }} />
+                              <span>Substituir a refeição toda por <b>{rs.name}</b>: {recipeSubLabel(rs)}</span>
                             </div>
-                          )
-                        })}
-                      </div>
-                      {((diet.mealSubs || {})[meal.id] || []).map((rs, i) => (
-                        <div key={i} className="iqt" style={{ display: 'flex', alignItems: 'flex-start', gap: 5, marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--line)' }}>
-                          <Repeat size={11} style={{ flexShrink: 0, marginTop: 2 }} />
-                          <span>Substituir a refeição toda por <b>{rs.name}</b>: {recipeSubLabel(rs)}</span>
+                          ))}
                         </div>
-                      ))}
+                      </div>
                     </div>
                   ))}
 

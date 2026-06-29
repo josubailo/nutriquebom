@@ -39,41 +39,43 @@ export function DietPrintBody({ diet, patient, profile }) {
               <span className="nm"><Utensils size={13} /> {meal.name}</span>
               <span className="tm"><Clock size={12} /> {meal.time}</span>
             </div>
-            <table className="dp-table">
-              <thead><tr><th>Alimento</th><th>Porção</th></tr></thead>
-              <tbody>
-                {meal.items.map((it, i) => (
-                  <tr key={it.id || i}><td>{cleanName(it.name)}</td><td>{it.label || `${it.grams}g`}</td></tr>
-                ))}
-              </tbody>
-            </table>
-
-            {ingredientSubs.length > 0 && (
-              <table className="dp-subs">
+            <div className="dp-cols">
+              <table className="dp-table">
+                <thead><tr><th>Alimento</th><th>Porção</th></tr></thead>
                 <tbody>
-                  {ingredientSubs.map((it) => (
-                    <tr key={it.id}>
-                      <td>• {cleanName(it.name)}</td>
-                      <td>pode substituir por: {joinOr(diet.subs[it.foodId || it.name])}</td>
-                    </tr>
+                  {meal.items.map((it, i) => (
+                    <tr key={it.id || i}><td>{cleanName(it.name)}</td><td>{it.label || `${it.grams}g`}</td></tr>
                   ))}
                 </tbody>
               </table>
-            )}
 
-            {mealSubs.map((rs, i) => (
-              <table className="dp-recipe" key={i}>
-                <tbody>
-                  <tr><td colSpan={2} className="dp-recipe-title">• Refeição inteira - substituir por: {rs.name}</td></tr>
-                  {rs.items.map((it, j) => (
-                    <tr key={j}>
-                      <td style={{ paddingLeft: 14 }}>{cleanName(it.name)}</td>
-                      <td>{it.role === 'free' ? 'à vontade' : `${it.scaledGrams}g`}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ))}
+              {ingredientSubs.length > 0 && (
+                <table className="dp-subs">
+                  <tbody>
+                    {ingredientSubs.map((it) => (
+                      <tr key={it.id}>
+                        <td>• {cleanName(it.name)}</td>
+                        <td>pode substituir por: {joinOr(diet.subs[it.foodId || it.name])}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {mealSubs.map((rs, i) => (
+                <table className="dp-recipe" key={i}>
+                  <tbody>
+                    <tr><td colSpan={2} className="dp-recipe-title">• Refeição inteira - substituir por: {rs.name}</td></tr>
+                    {rs.items.map((it, j) => (
+                      <tr key={j}>
+                        <td style={{ paddingLeft: 14 }}>{cleanName(it.name)}</td>
+                        <td>{it.role === 'free' ? 'à vontade' : `${it.scaledGrams}g`}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ))}
+            </div>
           </div>
         );
       })}
@@ -82,14 +84,16 @@ export function DietPrintBody({ diet, patient, profile }) {
         <div className="dp-sups">
           <div className="dp-meal">
             <div className="dp-meal-head"><span className="nm"><Pill size={13} /> Suplementação</span></div>
-            <table className="dp-table">
-              <thead><tr><th>Suplemento</th><th>Dose / Horário</th></tr></thead>
-              <tbody>
-                {diet.supplements.map((s, i) => (
-                  <tr key={i}><td>{s.name}</td><td>{s.dose} - {s.time}</td></tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="dp-cols">
+              <table className="dp-table">
+                <thead><tr><th>Suplemento</th><th>Dose / Horário</th></tr></thead>
+                <tbody>
+                  {diet.supplements.map((s, i) => (
+                    <tr key={i}><td>{s.name}</td><td>{s.dose} - {s.time}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

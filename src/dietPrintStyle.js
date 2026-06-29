@@ -31,16 +31,16 @@ export const DIET_PRINT_STYLE = `
   .dp-meal-head .nm { display: flex; align-items: center; gap: 6px; text-align: left; }
   .dp-meal-head .tm { display: flex; align-items: center; gap: 4px; font-weight: 600; font-size: 12px; color: #7a8f84; }
   .dp-meal-head svg { flex-shrink: 0; }
+  .dp-cols { max-width: 420px; margin: 0 auto; }
   .dp-table { width: 100%; border-collapse: collapse; }
-  .dp-table th { font-size: 11.5px; font-weight: 700; color: #16241d; text-align: left; padding: 5px 0; border-bottom: 1.5px solid #16241d; }
-  .dp-table th:last-child { text-align: right; }
-  .dp-table td { padding: 9px 0; font-size: 13px; text-align: left; border-bottom: 1px solid #e4e9e3; }
-  .dp-table td:last-child { text-align: right; color: #5d6f66; }
+  .dp-table th { font-size: 11.5px; font-weight: 700; color: #16241d; text-align: center; padding: 5px 0; border-bottom: 1.5px solid #16241d; }
+  .dp-table td { padding: 9px 0; font-size: 13px; text-align: center; border-bottom: 1px solid #e4e9e3; }
+  .dp-table td:last-child { color: #5d6f66; }
   .dp-subs, .dp-recipe { width: 100%; border-collapse: collapse; margin-top: 4px; }
   .dp-subs tr:first-child td, .dp-recipe tr:first-child td { padding-top: 7px; }
   .dp-subs { border-top: 1px dashed #cfd8d2; }
   .dp-recipe { border-top: 1px solid #cde8d8; }
-  .dp-subs td, .dp-recipe td { font-size: 10.5px; color: #7a8f84; padding: 3px 4px; text-align: left; }
+  .dp-subs td, .dp-recipe td { font-size: 10.5px; color: #7a8f84; padding: 3px 4px; text-align: center; }
   .dp-subs td:first-child { width: 42%; }
   .dp-recipe .dp-recipe-title { color: #157a4c; font-weight: 700; }
   .dp-sups { margin-top: 18px; page-break-inside: avoid; }
