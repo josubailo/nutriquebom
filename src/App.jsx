@@ -709,7 +709,7 @@ export default function App() {
               onDelDiet={(did) => delDiet(activePatient.id, did)}
               onDuplicateDiet={(d) => { const copy = { ...JSON.parse(JSON.stringify(d)), id: uid(), name: d.name + " (cópia)", createdAt: Date.now(), active: false }; saveDiet(activePatient.id, copy); }}
               onRenameDiet={(did, name) => { const diet = dietsOf(activePatient.id).find(x => x.id === did); if (diet) saveDiet(activePatient.id, { ...diet, name }); }}
-              onSetActiveDiet={(did) => { dietsOf(activePatient.id).forEach(d => saveDiet(activePatient.id, { ...d, active: d.id === did })); }}
+              onSetActiveDiet={(did) => { const cur = dietsOf(activePatient.id).find(d => d.id === did); if (cur) saveDiet(activePatient.id, { ...cur, active: !cur.active }); }}
               assessments={assessOf(activePatient?.id)}
               onSaveAssessment={(a) => saveAssessment(activePatient.id, a)}
               onDelAssessment={(aid) => delAssessment(activePatient.id, aid)}
@@ -728,7 +728,7 @@ export default function App() {
             view === "exams" ? <ExamsView patient={activePatient} exams={examsOf(activePatient?.id)} onSave={(e) => saveExam(activePatient.id, e)} onDel={(eid) => delExam(activePatient.id, eid)} onPickPatient={() => setView("patients")} /> :
             view === "anamnese" ? <AnamneseView key={activePatient?.id} patient={activePatient} template={data.anamneseTemplate || DEFAULT_ANAMNESE} answers={anamneseOf(activePatient?.id)} onSaveAnswers={(a) => saveAnamnese(activePatient.id, a)} onSaveTemplate={saveTemplate} onPickPatient={() => setView("patients")} /> :
             view === "profile" ? <ProfileView profile={data.profile || {}} onSave={saveProfile} /> :
-            view === "history" ? <HistoryView patient={activePatient} diets={dietsOf(activePatient?.id)} onOpen={(d) => openDiet(activePatient, d)} onNew={() => openNewDiet(activePatient)} onDel={(did) => delDiet(activePatient.id, did)} onDuplicate={(d) => { const copy = { ...JSON.parse(JSON.stringify(d)), id: uid(), name: d.name + " (cópia)", createdAt: Date.now(), active: false }; saveDiet(activePatient.id, copy); }} onRename={(did, name) => { const diet = dietsOf(activePatient.id).find(x => x.id === did); if (diet) saveDiet(activePatient.id, { ...diet, name }); }} onSetActive={(did) => { dietsOf(activePatient.id).forEach(d => saveDiet(activePatient.id, { ...d, active: d.id === did })); }} /> :
+            view === "history" ? <HistoryView patient={activePatient} diets={dietsOf(activePatient?.id)} onOpen={(d) => openDiet(activePatient, d)} onNew={() => openNewDiet(activePatient)} onDel={(did) => delDiet(activePatient.id, did)} onDuplicate={(d) => { const copy = { ...JSON.parse(JSON.stringify(d)), id: uid(), name: d.name + " (cópia)", createdAt: Date.now(), active: false }; saveDiet(activePatient.id, copy); }} onRename={(did, name) => { const diet = dietsOf(activePatient.id).find(x => x.id === did); if (diet) saveDiet(activePatient.id, { ...diet, name }); }} onSetActive={(did) => { const cur = dietsOf(activePatient.id).find(d => d.id === did); if (cur) saveDiet(activePatient.id, { ...cur, active: !cur.active }); }} /> :
             view === "builder" ? <Builder patient={activePatient} diet={activeDiet} setDiet={setActiveDiet} foods={allFoods} recipes={recipes} profile={data.profile || {}} onSave={() => { saveDiet(activePatient.id, activeDiet); setView("history"); }} onBack={() => setView("history")} /> :
             null}
         </main>
@@ -756,7 +756,7 @@ function PatientsView({ patients, onAdd, onNewDiet, onHistory, onAssessment, onE
       </div>
 
       {list.length === 0 ? (
-        <div className="empty"><Users size={40} style={{ opacity: .4 }} /><p>Nenhum paciente ainda. Clique em “Novo Paciente” para começar.</p></div>
+        <div className="empty"><Users size={40} style={{ opacity: .4 }} /><p>Nenhum paciente ainda. Clique em "Novo Paciente" para começar.</p></div>
       ) : (
         <div className="grid-cards">
           {list.map((p) => (
@@ -855,11 +855,8 @@ function HistoryView({ patient, diets, onOpen, onNew, onDel, onDuplicate, onRena
     setRenamingId(null);
   };
 
-  // Determina qual dieta está publicada para o paciente
-  const hasExplicitActive = diets.some(d => d.active === true);
-  const activeDietId = hasExplicitActive
-    ? diets.find(d => d.active === true)?.id
-    : (diets.length > 0 ? [...diets].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0]?.id : null);
+  // Qualquer dieta com active === true está publicada; múltiplas permitidas
+
 
   const fmtTs = (ts) => {
     if (!ts) return null;
@@ -874,7 +871,7 @@ function HistoryView({ patient, diets, onOpen, onNew, onDel, onDuplicate, onRena
         diets.map((d) => {
           const tgt = computeTargets(d);
           const isRenaming = renamingId === d.id;
-          const isActive = d.id === activeDietId;
+          const isActive = d.active === true;
           return (
             <div className="panel" key={d.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: 18, flexWrap: "wrap", border: isActive ? '2px solid var(--green)' : undefined }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -890,7 +887,6 @@ function HistoryView({ patient, diets, onOpen, onNew, onDel, onDuplicate, onRena
                 ) : (
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <div style={{ fontWeight: 700, fontSize: 16 }}>{d.name}</div>
-                    {isActive && <span style={{ fontSize: 11, background: 'var(--green)', color: '#fff', padding: '2px 10px', borderRadius: 999, fontWeight: 700 }}>📢 Publicada</span>}
                     <button className="iconbtn" title="Renomear" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-soft)", padding: 3 }} onClick={() => startRename(d)}><Pencil size={13} /></button>
                   </div>
                 )}
@@ -909,11 +905,9 @@ function HistoryView({ patient, diets, onOpen, onNew, onDel, onDuplicate, onRena
               </div>
               {!isRenaming && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  {!isActive && (
-                    <button className="btn sm" style={{ background: 'var(--green-soft)', color: 'var(--green-d)', border: '1px solid #cde8d8' }} title="Publicar esta dieta para o paciente" onClick={() => onSetActive(d.id)}>
-                      📢 Publicar para paciente
-                    </button>
-                  )}
+                  <button className="btn sm" style={{ background: isActive ? 'var(--green)' : 'var(--green-soft)', color: isActive ? '#fff' : 'var(--green-d)', border: '1px solid #cde8d8' }} title={isActive ? "Despublicar esta dieta" : "Publicar esta dieta para o paciente"} onClick={() => onSetActive(d.id)}>
+                    {isActive ? '📢 Publicada' : '📢 Publicar'}
+                  </button>
                   <button className="btn sm ghost" onClick={() => onOpen(d)}><Pencil size={15} /> Abrir</button>
                   <button className="btn sm ghost" onClick={() => onDuplicate(d)}><Copy size={15} /> Duplicar</button>
                   <button className="btn sm danger" onClick={() => onDel(d.id)}><Trash2 size={15} /></button>
@@ -1222,7 +1216,7 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, recipes, profi
             );
           })}
         </div>
-        <p className="ph" style={{ marginTop: 14, marginBottom: 0 }}>Observação: a tabela TACO não traz Vitamina D, B12 e E - preencha esses valores nos alimentos em “Meus Alimentos” para que apareçam aqui. Alimentos próprios entram com fibra e com os micronutrientes que você informar.</p>
+        <p className="ph" style={{ marginTop: 14, marginBottom: 0 }}>Observação: a tabela TACO não traz Vitamina D, B12 e E - preencha esses valores nos alimentos em "Meus Alimentos" para que apareçam aqui. Alimentos próprios entram com fibra e com os micronutrientes que você informar.</p>
       </div>
 
       {/* Suplementação */}
@@ -1259,8 +1253,11 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, recipes, profi
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--line)' }}>
                 <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', marginBottom: 6 }}>Substituir a refeição inteira por uma receita:</div>
                 {((diet.mealSubs || {})[meal.id] || []).map((rs, i) => (
-                  <div className="chip" key={i} style={{ display: 'inline-flex', alignItems: 'flex-start', maxWidth: 480, height: 'auto', whiteSpace: 'normal', padding: '8px 10px' }}>
-                    <span><b>{rs.name}</b>: {rs.items.map((it) => it.role === 'free' ? cleanName(it.name) : `${cleanName(it.name)} ${it.scaledGrams}g`).join(', ')}</span>
+                  <div className="chip" key={i} style={{ display: 'inline-flex', alignItems: 'flex-start', maxWidth: 520, height: 'auto', whiteSpace: 'normal', padding: '8px 10px' }}>
+                    <span>
+                      <b>{rs.name}</b>: {rs.items.map((it) => it.role === 'free' ? cleanName(it.name) : `${cleanName(it.name)} ${it.unit || `${it.scaledGrams}g`}`).join(', ')}
+                      {rs.note && <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-soft)', marginTop: 3 }}>{rs.note}</span>}
+                    </span>
                     <button onClick={() => setDiet((d) => ({ ...d, mealSubs: { ...(d.mealSubs || {}), [meal.id]: ((d.mealSubs || {})[meal.id] || []).filter((_, j) => j !== i) } }))}><X size={13} /></button>
                   </div>
                 ))}
@@ -1384,7 +1381,8 @@ function SubAdder({ foods, baseKcal, onAdd }) {
 
 function RecipeMealSubAdder({ recipes, mealItems, onAdd }) {
   const [recipeId, setRecipeId] = useState("");
-  const [edited, setEdited] = useState(null); // array de grams editáveis, espelha `scaled`
+  const [edited, setEdited] = useState(null);
+  const [note, setNote] = useState("");
   const targets = useMemo(() => macroTargetsByRole(mealItems), [mealItems]);
   const recipe = recipes.find((r) => r.id === recipeId);
 
@@ -1396,14 +1394,14 @@ function RecipeMealSubAdder({ recipes, mealItems, onAdd }) {
 
   const add = () => {
     if (!recipe || !edited) return;
-    onAdd({ recipeId: recipe.id, name: recipe.name, items: edited.map((it) => ({ name: it.name, role: it.role, scaledGrams: it.scaledGrams })) });
-    setRecipeId(""); setEdited(null);
+    onAdd({ recipeId: recipe.id, name: recipe.name, note: note.trim(), items: edited.map((it) => ({ name: it.name, role: it.role, scaledGrams: it.scaledGrams, unit: it.unit || '' })) });
+    setRecipeId(""); setEdited(null); setNote("");
   };
 
-  if (!recipes.length) return <div style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>Nenhuma receita cadastrada ainda. Crie em “Receitas”.</div>;
+  if (!recipes.length) return <div style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>Nenhuma receita cadastrada ainda. Crie em "Receitas".</div>;
 
   return (
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', maxWidth: 560 }}>
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', maxWidth: 600 }}>
       <select className="field" style={{ flex: 1, minWidth: 180 }} value={recipeId} onChange={(e) => pickRecipe(e.target.value)}>
         <option value="">Selecione uma receita…</option>
         {recipes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
@@ -1411,26 +1409,64 @@ function RecipeMealSubAdder({ recipes, mealItems, onAdd }) {
       <button className="btn sm" disabled={!recipe || !edited} onClick={add}><Plus size={14} /> Adicionar</button>
       {recipe && edited && (
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6, background: 'var(--bg)', borderRadius: 10, padding: 10 }}>
-          <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Quantidades sugeridas (ajuste se precisar):</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 2 }}>Ingredientes (ajuste se precisar):</div>
           {edited.map((it, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-              <span style={{ flex: 1 }}>{cleanName(it.name)}</span>
+              <input
+                className="field"
+                style={{ flex: 1, padding: '4px 8px', height: 30 }}
+                value={it.name}
+                onChange={(e) => setEdited((arr) => arr.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+              />
               {it.role === 'free' ? (
-                <span style={{ color: 'var(--ink-soft)', fontSize: 12 }}>à vontade</span>
+                <span style={{ color: 'var(--ink-soft)', fontSize: 12, minWidth: 70 }}>à vontade</span>
+              ) : it.unit ? (
+                <input
+                  className="field"
+                  style={{ width: 110, padding: '4px 8px', height: 30 }}
+                  value={it.unit}
+                  placeholder="ex: 2 unid."
+                  onChange={(e) => setEdited((arr) => arr.map((x, j) => j === i ? { ...x, unit: e.target.value } : x))}
+                />
               ) : (
-                <>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                   <input
                     type="number"
                     className="field"
-                    style={{ width: 80, padding: '4px 8px', height: 30 }}
+                    style={{ width: 70, padding: '4px 8px', height: 30 }}
                     value={it.scaledGrams}
                     onChange={(e) => setEdited((arr) => arr.map((x, j) => j === i ? { ...x, scaledGrams: +e.target.value } : x))}
                   />
-                  <span style={{ color: 'var(--ink-soft)' }}>g</span>
-                </>
+                  <span style={{ color: 'var(--ink-soft)', fontSize: 12 }}>g</span>
+                  <button
+                    className="btn sm ghost"
+                    style={{ padding: '2px 7px', fontSize: 11, height: 28 }}
+                    title="Trocar para unidade livre (ex: 2 unidades)"
+                    onClick={() => setEdited((arr) => arr.map((x, j) => j === i ? { ...x, unit: `${it.scaledGrams}g` } : x))}
+                  >abc</button>
+                </div>
+              )}
+              {it.unit && (
+                <button
+                  className="btn sm ghost"
+                  style={{ padding: '2px 7px', fontSize: 11, height: 28 }}
+                  title="Voltar para gramas"
+                  onClick={() => setEdited((arr) => arr.map((x, j) => j === i ? { ...x, unit: '' } : x))}
+                >g</button>
               )}
             </div>
           ))}
+          <div style={{ marginTop: 6 }}>
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 4 }}>Observação / modo de preparo (opcional):</div>
+            <textarea
+              className="field"
+              rows={3}
+              style={{ width: '100%', resize: 'vertical', fontSize: 13 }}
+              placeholder="Ex: Refogue a carne com azeite, adicione o molho..."
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
         </div>
       )}
     </div>
@@ -1488,7 +1524,7 @@ function FoodModal({ meal, foods, editItem, onClose, onConfirm }) {
                   <div>{cleanName(f.n)}{f.custom ? " ⭐" : ""}<br /><small>{f.kcal} kcal · P{f.p} C{f.c} G{f.f} Fib{f.fib || 0} /100g{f.g ? " · " + f.g : ""}</small></div>
                 </div>
               ))}
-              {q.trim().length >= 2 && results.length === 0 && <div style={{ padding: 14, color: "var(--ink-soft)" }}>Nenhum alimento encontrado. Cadastre em “Meus Alimentos”.</div>}
+              {q.trim().length >= 2 && results.length === 0 && <div style={{ padding: 14, color: "var(--ink-soft)" }}>Nenhum alimento encontrado. Cadastre em "Meus Alimentos".</div>}
               {q.trim().length < 2 && <div style={{ padding: 14, color: "var(--ink-soft)" }}>Digite ao menos 2 letras para buscar.</div>}
             </div>
           </>
@@ -2102,7 +2138,7 @@ function ExamsView({ patient, exams, onSave, onDel, onPickPatient }) {
     const name = (cat ? cat.n : q).trim();
     if (!name || result === "") return;
     const cls = classifyExam(cat, sex, result);
-    onSave({ name, unit: unit || (cat ? cat.u : ""), result: +result, date, status: cls.status, color: cls.color, ref: rg ? `${rg[0]}–${rg[1]}` : "", note: cat ? cat.note : "" });
+    onSave({ name, unit: unit || (cat ? cat.u : ""), result: +result, date, status: cls.status, color: cls.color, ref: rg ? `${rg[0]}-${rg[1]}` : "", note: cat ? cat.note : "" });
     setCat(null); setQ(""); setUnit(""); setResult("");
   };
 
@@ -2137,7 +2173,7 @@ function ExamsView({ patient, exams, onSave, onDel, onPickPatient }) {
               <div className="food-results" style={{ position: "absolute", zIndex: 5, background: "#fff", width: "100%" }}>
                 {matches.map((c) => (
                   <div className="fr" key={c.n} onClick={() => pickCat(c)}>
-                    <div>{c.n}<br /><small>ref: {(c.r || (sex === "F" ? c.rF : c.rM)).join("–")} {c.u}</small></div>
+                    <div>{c.n}<br /><small>ref: {(c.r || (sex === "F" ? c.rF : c.rM)).join("-")} {c.u}</small></div>
                   </div>
                 ))}
               </div>
@@ -2150,7 +2186,7 @@ function ExamsView({ patient, exams, onSave, onDel, onPickPatient }) {
         </div>
         {cat && (
           <div className="infobox" style={{ background: "var(--green-soft)", border: "1px solid #cde8d8", color: "var(--ink)" }}>
-            Faixa de referência: <b>{rg ? `${rg[0]}–${rg[1]} ${cat.u}` : "-"}</b>
+            Faixa de referência: <b>{rg ? `${rg[0]}-${rg[1]} ${cat.u}` : "-"}</b>
             {result !== "" && <> · Classificação: <b style={{ color: liveClass.color }}>{liveClass.status}</b></>}
             <div style={{ color: "var(--ink-soft)", fontSize: 12.5, marginTop: 4 }}>{cat.note}</div>
           </div>
@@ -2288,7 +2324,7 @@ function AnamneseView({ patient, template, answers, onSaveAnswers, onSaveTemplat
 
       {mode === "fill" ? (
         <>
-          <div className="infobox">Para o paciente responder de casa por um link próprio é necessário um servidor (etapa futura). Por enquanto, use “Copiar p/ enviar” para mandar as perguntas pelo WhatsApp e registrar as respostas aqui.</div>
+          <div className="infobox">Para o paciente responder de casa por um link próprio é necessário um servidor (etapa futura). Por enquanto, use "Copiar p/ enviar" para mandar as perguntas pelo WhatsApp e registrar as respostas aqui.</div>
           {template.map((s) => (
             <div className="panel" key={s.id}>
               <h2>{s.title}</h2>

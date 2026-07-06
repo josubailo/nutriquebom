@@ -66,9 +66,14 @@ export function DietPrintBody({ diet, patient, profile }) {
                     {rs.items.map((it, j) => (
                       <tr key={j}>
                         <td style={{ paddingLeft: 14 }}>{cleanName(it.name)}</td>
-                        <td>{it.role === 'free' ? 'à vontade' : `${it.scaledGrams}g`}</td>
+                        <td>{it.role === 'free' ? 'à vontade' : (it.unit || `${it.scaledGrams}g`)}</td>
                       </tr>
                     ))}
+                    {rs.note && (
+                      <tr>
+                        <td colSpan={2} style={{ paddingLeft: 14, paddingTop: 6, color: '#5d6f66', fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>{rs.note}</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               ))}

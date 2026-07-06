@@ -17,7 +17,7 @@ import { DietPrintBody } from './dietPrint'
 const cleanName = (n) => (n || '').replace(/\s+/g, ' ').trim()
 // junta uma lista de substitutos em texto legível: "A ou B" / "A, B ou C"
 const subLabel = (s) => typeof s === 'string' ? s : `${s.name} (${s.grams}g)`
-const recipeSubLabel = (rs) => rs.items.map((it) => it.role === 'free' ? it.name : `${it.name} ${it.scaledGrams}g`).join(', ')
+const recipeSubLabel = (rs) => rs.items.map((it) => it.role === 'free' ? it.name : `${it.name} ${it.unit || `${it.scaledGrams}g`}`).join(', ')
 
 const joinOr = (arr) => {
   if (!arr || arr.length === 0) return ''
@@ -113,18 +113,15 @@ export default function PatientPortal({ patientData }) {
 function PtDiets({ diets, patient }) {
   const [openId, setOpenId] = useState(null)
 
-  // Mostra a dieta marcada como publicada (active: true),
+  // Mostra todas as dietas marcadas como publicadas (active: true),
   // ou a mais recente se nenhuma foi explicitamente publicada
   const sorted = [...diets].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-  const hasExplicitActive = diets.some(d => d.active === true)
-  const current = hasExplicitActive
-    ? diets.find(d => d.active === true) || sorted[0]
-    : sorted[0] || null
-  const visibleDiets = current ? [current] : []
+  const activeDiets = diets.filter(d => d.active === true)
+  const visibleDiets = activeDiets.length > 0 ? activeDiets : (sorted[0] ? [sorted[0]] : [])
 
   const active = visibleDiets.find(d => d.id === openId)
 
-  if (!current) return (
+  if (!visibleDiets.length) return (
     <div className="empty">
       <Utensils size={44} style={{ opacity: .25, marginBottom: 12 }} />
       <div style={{ fontFamily: "'Fraunces',serif", fontSize: 18, marginBottom: 6 }}>Nenhuma dieta ainda</div>
@@ -200,7 +197,10 @@ function PtDiets({ diets, patient }) {
                         {((diet.mealSubs || {})[meal.id] || []).map((rs, i) => (
                           <div key={i} className="iqt" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', textAlign: 'center', gap: 5, marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--line)' }}>
                             <Repeat size={11} style={{ flexShrink: 0, marginTop: 2 }} />
-                            <span>Substituir a refeição toda por <b>{rs.name}</b>: {recipeSubLabel(rs)}</span>
+                            <span>
+                              Substituir a refeição toda por <b>{rs.name}</b>: {recipeSubLabel(rs)}
+                              {rs.note && <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-soft)', marginTop: 3, fontStyle: 'italic' }}>{rs.note}</span>}
+                            </span>
                           </div>
                         ))}
                       </div>
