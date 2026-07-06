@@ -3,7 +3,7 @@
 import { Utensils, Clock, Pill, ClipboardList, Repeat } from 'lucide-react';
 
 const cleanName = (n) => (n || '').replace(/\s+/g, ' ').trim();
-const subLabel = (s) => typeof s === 'string' ? s : `${s.name} (${s.grams}g)`;
+const subLabel = (s) => typeof s === 'string' ? s.replace(/—|–/g, '-') : `${s.name} (${s.grams}g)`;
 const joinOr = (arr) => {
   if (!arr || arr.length === 0) return '';
   const labels = arr.map(subLabel);

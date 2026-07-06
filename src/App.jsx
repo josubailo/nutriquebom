@@ -272,7 +272,7 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 // remove espaços duplicados/extras digitados no nome do alimento
 const cleanName = (n) => (n || "").replace(/\s+/g, " ").trim();
 // junta uma lista de substitutos em texto legível: "A ou B" / "A, B ou C"
-const subLabel = (s) => typeof s === "string" ? s : `${s.name} (${s.grams}g)`;
+const subLabel = (s) => typeof s === "string" ? s.replace(/—|–/g, "-") : `${s.name} (${s.grams}g)`;
 const ageFrom = (birth) => {
   if (!birth) return "";
   const d = new Date(birth); if (isNaN(d)) return "";
