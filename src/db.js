@@ -303,7 +303,9 @@ export async function loadVideoRequests(nutritionistId) {
 
 // ── Fotos dos pacientes ──────────────────────────────────────
 export async function uploadPatientPhoto(patientId, nutritionistId, file, caption) {
-  const path = `${patientId}/${Date.now()}_${file.name}`
+  const ext = file.name.split('.').pop().toLowerCase()
+  const safeName = `${Date.now()}.${ext}`
+  const path = `${patientId}/${safeName}`
   const { error: upErr } = await supabase.storage.from('patient-photos').upload(path, file)
   if (upErr) return { error: upErr }
 
