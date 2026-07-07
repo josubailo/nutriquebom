@@ -98,7 +98,7 @@ export default function PatientPortal({ patientData }) {
         <main className="main">
           {tab === 'diets'       && <PtDiets diets={diets} patient={patient} />}
           {tab === 'appointment' && <PtAppointment patient={patient} />}
-          {tab === 'photos'      && <PtPhotos patient={patient} photos={photos} onAdd={p => setPhotos(prev => [p, ...prev])} onRemove={id => setPhotos(prev => prev.filter(x => x.id !== id))} onGoToDiets={() => setTab('diets')} />}
+          {tab === 'photos'      && <PtPhotos patient={patient} photos={photos} onAdd={p => setPhotos(prev => [p, ...prev])} onRemove={id => setPhotos(prev => prev.filter(x => x.id !== id))} />}
           {tab === 'messages'    && <PtMessages patient={patient} messages={messages} onAdd={m => setMessages(prev => [m, ...prev])} />}
           {tab === 'video'       && <PtVideo patient={patient} reqs={videoReqs} onAdd={r => setVideoReqs(prev => [r, ...prev])} />}
           {tab === 'assessments' && <PtAssessments assessments={assessments} />}
@@ -290,7 +290,7 @@ const EVAL_SUBTYPES = [
   'Frente', 'Lado Direito', 'Lado Esquerdo', 'Costas', 'Pose de Musculação', 'Outra'
 ]
 
-function PtPhotos({ patient, photos, onAdd, onRemove, onGoToDiets }) {
+function PtPhotos({ patient, photos, onAdd, onRemove }) {
   const [photoMode,  setPhotoMode]  = useState('avaliacao') // 'progresso' | 'avaliacao'
   const [subType,    setSubType]    = useState('Frente')
   const [caption,    setCaption]    = useState('')
@@ -336,7 +336,6 @@ function PtPhotos({ patient, photos, onAdd, onRemove, onGoToDiets }) {
   }
 
   const handleSendAnother = () => { setSuccess(false) }
-  const handleGoToDiets   = () => { setSuccess(false); onGoToDiets() }
 
   return (
     <>
@@ -344,13 +343,15 @@ function PtPhotos({ patient, photos, onAdd, onRemove, onGoToDiets }) {
       <p className="sub">Registre seu progresso e fotos dos pratos</p>
 
       {success && (
-        <div className="panel" style={{ marginTop: 20, textAlign: 'center', padding: 32 }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+        <div className="panel" style={{ marginTop: 20, textAlign: 'center', padding: 40 }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', border: '2.5px solid var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <Check size={32} color="var(--green)" strokeWidth={2.5} />
+          </div>
           <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 6 }}>Foto enviada com sucesso!</div>
           <div style={{ color: 'var(--ink-soft)', marginBottom: 24 }}>Deseja enviar outra foto?</div>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
             <button className="btn" onClick={handleSendAnother}>Sim</button>
-            <button className="btn ghost" onClick={handleGoToDiets}>Não</button>
+            <button className="btn ghost" onClick={() => setSuccess(false)}>Não</button>
           </div>
         </div>
       )}
