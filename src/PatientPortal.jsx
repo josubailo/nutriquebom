@@ -98,7 +98,7 @@ export default function PatientPortal({ patientData }) {
         <main className="main">
           {tab === 'diets'       && <PtDiets diets={diets} patient={patient} />}
           {tab === 'appointment' && <PtAppointment patient={patient} />}
-          {tab === 'photos'      && <PtPhotos patient={patient} photos={photos} onAdd={p => setPhotos(prev => [p, ...prev])} onRemove={id => setPhotos(prev => prev.filter(x => x.id !== id))} />}
+          {tab === 'photos'      && <PtPhotos patient={patient} photos={photos} onAdd={p => setPhotos(prev => [p, ...prev])} onRemove={id => setPhotos(prev => prev.filter(x => x.id !== id))} onGoToDiets={() => setTab('diets')} />}
           {tab === 'messages'    && <PtMessages patient={patient} messages={messages} onAdd={m => setMessages(prev => [m, ...prev])} />}
           {tab === 'video'       && <PtVideo patient={patient} reqs={videoReqs} onAdd={r => setVideoReqs(prev => [r, ...prev])} />}
           {tab === 'assessments' && <PtAssessments assessments={assessments} />}
@@ -290,14 +290,15 @@ const EVAL_SUBTYPES = [
   'Frente', 'Lado Direito', 'Lado Esquerdo', 'Costas', 'Pose de Musculação', 'Outra'
 ]
 
-function PtPhotos({ patient, photos, onAdd, onRemove }) {
-  const [photoMode,  setPhotoMode]  = useState('progresso') // 'progresso' | 'avaliacao'
+function PtPhotos({ patient, photos, onAdd, onRemove, onGoToDiets }) {
+  const [photoMode,  setPhotoMode]  = useState('avaliacao') // 'progresso' | 'avaliacao'
   const [subType,    setSubType]    = useState('Frente')
   const [caption,    setCaption]    = useState('')
   const [obs,        setObs]        = useState('')
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState('')
   const [preview,    setPreview]    = useState(null)
+  const [success,    setSuccess]    = useState(false)
   const fileRef = useRef()
 
   const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'image/heif']
@@ -327,19 +328,34 @@ function PtPhotos({ patient, photos, onAdd, onRemove }) {
     if (err) setError(`Erro ao enviar: ${err.message || 'Tente novamente.'}`)
     else {
       onAdd(data)
-      setCaption(''); setObs(''); setPreview(null)
-      setPhotoMode('progresso'); setSubType('Frente')
+      setCaption(''); setObs(''); setPreview(null); setSubType('Frente')
+      setSuccess(true)
     }
     setLoading(false)
     if (fileRef.current) fileRef.current.value = ''
   }
+
+  const handleSendAnother = () => { setSuccess(false) }
+  const handleGoToDiets   = () => { setSuccess(false); onGoToDiets() }
 
   return (
     <>
       <h1 className="title">Minhas <span>Fotos</span></h1>
       <p className="sub">Registre seu progresso e fotos dos pratos</p>
 
-      <div className="panel" style={{ marginTop: 20 }}>
+      {success && (
+        <div className="panel" style={{ marginTop: 20, textAlign: 'center', padding: 32 }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+          <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 6 }}>Foto enviada com sucesso!</div>
+          <div style={{ color: 'var(--ink-soft)', marginBottom: 24 }}>Deseja enviar outra foto?</div>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <button className="btn" onClick={handleSendAnother}>Sim</button>
+            <button className="btn ghost" onClick={handleGoToDiets}>Não</button>
+          </div>
+        </div>
+      )}
+
+      {!success && <div className="panel" style={{ marginTop: 20 }}>
         <h2>Enviar nova foto</h2>
 
         {/* Tipo de foto */}
@@ -418,7 +434,7 @@ function PtPhotos({ patient, photos, onAdd, onRemove }) {
           </div>
         )}
         <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.heic,.heif,image/jpeg,image/png,image/heic,image/heif" style={{ display: 'none' }} onChange={pickFile} />
-      </div>
+      </div>}
 
       {photos.length === 0 ? (
         <div className="empty">
