@@ -300,9 +300,17 @@ function PtPhotos({ patient, photos, onAdd, onRemove }) {
   const [preview,    setPreview]    = useState(null)
   const fileRef = useRef()
 
+  const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'image/heif']
   const pickFile = e => {
     const f = e.target.files[0]
-    if (f) setPreview({ file: f, url: URL.createObjectURL(f) })
+    if (!f) return
+    if (!ALLOWED_TYPES.includes(f.type.toLowerCase()) && !f.name.toLowerCase().match(/\.(jpe?g|png|heic|heif)$/)) {
+      setError('Formato inválido. Envie apenas JPG, PNG ou HEIC.')
+      e.target.value = ''
+      return
+    }
+    setError('')
+    setPreview({ file: f, url: URL.createObjectURL(f) })
   }
 
   const upload = async () => {
@@ -409,7 +417,7 @@ function PtPhotos({ patient, photos, onAdd, onRemove }) {
             </div>
           </div>
         )}
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={pickFile} />
+        <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.heic,.heif,image/jpeg,image/png,image/heic,image/heif" style={{ display: 'none' }} onChange={pickFile} />
       </div>
 
       {photos.length === 0 ? (
