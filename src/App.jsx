@@ -2732,7 +2732,14 @@ function PatientPortalAdmin({
            feedbacks.map(f => (
             <div key={f.id} className="panel" style={{ marginBottom: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ fontSize: 13, color: '#5d6f66' }}>{new Date(f.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontSize: 13, color: '#5d6f66' }}>{new Date(f.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                  {f.source === 'patient' && (
+                    <span style={{ fontSize: 11, fontWeight: 700, background: '#e8f4fd', color: '#1a6fa8', border: '1px solid #b3d9f5', borderRadius: 999, padding: '2px 8px' }}>
+                      📱 Paciente
+                    </span>
+                  )}
+                </div>
                 <button className="iconbtn" title="Excluir registro" onClick={() => removeFeedback(f.id)}><Trash2 size={15} /></button>
               </div>
               {f.weight != null && (

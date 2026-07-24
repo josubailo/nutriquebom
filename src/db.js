@@ -337,12 +337,13 @@ export async function loadPatientPhotos(nutritionistId, patientId) {
 }
 
 // ── Feedbacks / acompanhamento semanal ───────────────────────
-export async function insertPatientFeedback(nutritionistId, patientId, { weight, content }) {
+export async function insertPatientFeedback(nutritionistId, patientId, { weight, content, source = 'nutritionist' }) {
   const { data, error } = await supabase.from('patient_feedbacks').insert({
     patient_id:      patientId,
     nutritionist_id: nutritionistId,
     weight:          weight || null,
     content:         content || null,
+    source,
   }).select().single()
   return { data, error }
 }

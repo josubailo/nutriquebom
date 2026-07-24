@@ -295,6 +295,7 @@ function PtPhotos({ patient, photos, onAdd, onRemove }) {
   const [subType,    setSubType]    = useState('Frente')
   const [caption,    setCaption]    = useState('')
   const [obs,        setObs]        = useState('')
+  const [photoWeight, setPhotoWeight] = useState('')
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState('')
   const [preview,    setPreview]    = useState(null)
@@ -325,12 +326,20 @@ function PtPhotos({ patient, photos, onAdd, onRemove }) {
       finalCaption = caption.trim()
     }
     const { data, error: err } = await db.uploadPatientPhoto(patient.id, nid, preview.file, finalCaption)
-    if (err) setError(`Erro ao enviar: ${err.message || 'Tente novamente.'}`)
-    else {
-      onAdd(data)
-      setCaption(''); setObs(''); setPreview(null); setSubType('Frente')
-      setSuccess(true)
+    if (err) { setError(`Erro ao enviar: ${err.message || 'Tente novamente.'}`); setLoading(false); return }
+    onAdd(data)
+    // Se o paciente informou o peso, registra automaticamente no histórico de feedbacks
+    const w = parseFloat(photoWeight)
+    if (!isNaN(w) && w > 0) {
+      const nid = patient.nutritionist_id || patient.nutritionistId
+      await db.insertPatientFeedback(nid, patient.id, {
+        weight: w,
+        content: null,
+        source: 'patient',
+      })
     }
+    setCaption(''); setObs(''); setPreview(null); setSubType('Frente'); setPhotoWeight('')
+    setSuccess(true)
     setLoading(false)
     if (fileRef.current) fileRef.current.value = ''
   }
@@ -420,16 +429,32 @@ function PtPhotos({ patient, photos, onAdd, onRemove }) {
             <img src={preview.url} alt="preview" style={{ width: 130, height: 130, objectFit: 'cover', borderRadius: 12, border: '1px solid var(--line)', flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 200 }}>
               {photoMode === 'progresso' && (
-                <div className="row" style={{ marginBottom: 0 }}>
+                <div className="row" style={{ marginBottom: 8 }}>
                   <label className="lbl">Descrição (opcional)</label>
                   <input className="field" value={caption} onChange={e => setCaption(e.target.value)} placeholder="Ex.: almoço, evolução semana 3…" />
                 </div>
               )}
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <div className="row" style={{ marginBottom: 8 }}>
+                <label className="lbl">Peso atual (opcional)</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    className="field"
+                    type="number"
+                    step="0.1"
+                    style={{ width: 110 }}
+                    value={photoWeight}
+                    onChange={e => setPhotoWeight(e.target.value)}
+                    placeholder="Ex.: 68.5"
+                  />
+                  <span style={{ color: 'var(--ink-soft)', fontSize: 13 }}>kg</span>
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginTop: 3 }}>Aparecerá no histórico do seu nutricionista</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                 <button className="btn sm" onClick={upload} disabled={loading}>
                   <Send size={14} /> {loading ? 'Enviando…' : 'Enviar'}
                 </button>
-                <button className="btn sm ghost" onClick={() => { setPreview(null); setCaption(''); setObs('') }}>Cancelar</button>
+                <button className="btn sm ghost" onClick={() => { setPreview(null); setCaption(''); setObs(''); setPhotoWeight('') }}>Cancelar</button>
               </div>
             </div>
           </div>
