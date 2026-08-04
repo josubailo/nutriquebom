@@ -318,7 +318,22 @@ function PtPhotos({ patient, photos, onAdd, onRemove }) {
   const [error,      setError]      = useState('')
   const [preview,    setPreview]    = useState(null)
   const [success,    setSuccess]    = useState(false)
+  const [quickWeight,    setQuickWeight]    = useState('')
+  const [quickWeightOk,  setQuickWeightOk]  = useState(false)
+  const [quickWeightLoading, setQuickWeightLoading] = useState(false)
   const fileRef = useRef()
+
+  const saveQuickWeight = async () => {
+    const w = parseFloat(quickWeight)
+    if (isNaN(w) || w <= 0) return
+    setQuickWeightLoading(true)
+    const nid = patient.nutritionist_id || patient.nutritionistId
+    await db.insertPatientFeedback(nid, patient.id, { weight: w, content: null, source: 'patient' })
+    setQuickWeight('')
+    setQuickWeightOk(true)
+    setQuickWeightLoading(false)
+    setTimeout(() => setQuickWeightOk(false), 3000)
+  }
 
   const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'image/heif']
   const pickFile = e => {
@@ -479,6 +494,30 @@ function PtPhotos({ patient, photos, onAdd, onRemove }) {
         )}
         <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.heic,.heif,image/jpeg,image/png,image/heic,image/heif" style={{ display: 'none' }} onChange={pickFile} />
       </div>}
+
+      {/* Registro de peso independente */}
+      <div className="panel" style={{ marginTop: 14 }}>
+        <h2 style={{ fontSize: 15, marginBottom: 12 }}>Adicionar novo peso <span style={{ fontWeight: 400, color: 'var(--ink-soft)', fontSize: 13 }}>(opcional)</span></h2>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            className="field"
+            type="number"
+            step="0.1"
+            style={{ width: 120 }}
+            placeholder="Ex.: 68.5"
+            value={quickWeight}
+            onChange={e => { setQuickWeight(e.target.value); setQuickWeightOk(false) }}
+            onKeyDown={e => e.key === 'Enter' && saveQuickWeight()}
+          />
+          <span style={{ color: 'var(--ink-soft)', fontSize: 13 }}>kg</span>
+          <button className="btn sm" onClick={saveQuickWeight} disabled={quickWeightLoading || !quickWeight}>
+            {quickWeightOk
+              ? <><Check size={14} /> Salvo!</>
+              : quickWeightLoading ? 'Salvando…' : <><Send size={14} /> Registrar</>}
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 6 }}>Seu nutricionista poderá acompanhar sua evolução de peso.</div>
+      </div>
 
       {photos.length === 0 ? (
         <div className="empty">
