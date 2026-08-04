@@ -1186,6 +1186,12 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, recipes, profi
                 </div>
               ); })}
               <button className="btn sm ghost" style={{ marginTop: 10 }} onClick={() => setFoodModal({ mealId: meal.id })}><Plus size={15} /> Adicionar alimento</button>
+              <MealAlternatives
+                meal={meal}
+                foods={foods}
+                alts={(diet.mealAlts || {})[meal.id] || []}
+                onUpdate={(alts) => setDiet(d => ({ ...d, mealAlts: { ...(d.mealAlts || {}), [meal.id]: alts } }))}
+              />
             </div>
           </div>
         );
@@ -1468,6 +1474,111 @@ function RecipeMealSubAdder({ recipes, mealItems, onAdd }) {
             />
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Opções de substituição de refeição (alternativas completas) ── */
+function MealAlternatives({ meal, foods, alts, onUpdate }) {
+  const [open, setOpen] = useState(false);
+  const [foodModalAlt, setFoodModalAlt] = useState(null); // {altId}
+  const mainMacros = sumMacros(meal.items);
+
+  const addAlt = () => {
+    const id = uid();
+    onUpdate([...(alts || []), { id, note: '', items: [] }]);
+  };
+  const removeAlt = (altId) => onUpdate((alts || []).filter(a => a.id !== altId));
+  const updateAlt = (altId, patch) => onUpdate((alts || []).map(a => a.id === altId ? { ...a, ...patch } : a));
+  const addItem = (altId, item) => updateAlt(altId, { items: [...((alts||[]).find(a=>a.id===altId)?.items||[]), item] });
+  const removeItem = (altId, itemId) => updateAlt(altId, { items: (alts||[]).find(a=>a.id===altId)?.items.filter(x=>x.id!==itemId)||[] });
+
+  return (
+    <div style={{ borderTop: '1px dashed var(--line)', marginTop: 14, paddingTop: 10 }}>
+      <button
+        className="btn sm ghost"
+        style={{ width: '100%', justifyContent: 'space-between', color: 'var(--green-d)', borderColor: 'var(--green-soft)' }}
+        onClick={() => setOpen(o => !o)}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Repeat size={14} /> Opções de substituição ({(alts||[]).length})
+        </span>
+        {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          {/* Referência da refeição principal */}
+          <div style={{ fontSize: 12, color: 'var(--ink-soft)', background: 'var(--bg)', borderRadius: 8, padding: '7px 12px', marginBottom: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, color: 'var(--ink)' }}>Referência ({meal.name}):</span>
+            <span>🔥 {r0(mainMacros.kcal)} kcal</span>
+            <span style={{ color: 'var(--p)' }}>PTN {r0(mainMacros.p)}g</span>
+            <span style={{ color: 'var(--c)' }}>CHO {r0(mainMacros.c)}g</span>
+            <span style={{ color: 'var(--f)' }}>LIP {r0(mainMacros.f)}g</span>
+          </div>
+
+          {(alts || []).map((alt, idx) => {
+            const altMacros = sumMacros(alt.items);
+            return (
+              <div key={alt.id} style={{ border: '1px solid var(--line)', borderRadius: 12, marginBottom: 12, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg)', padding: '10px 14px' }}>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>Opção {idx + 1}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
+                    <span>🔥 {r0(altMacros.kcal)}</span>
+                    <span style={{ color: 'var(--p)' }}>P{r0(altMacros.p)}</span>
+                    <span style={{ color: 'var(--c)' }}>C{r0(altMacros.c)}</span>
+                    <span style={{ color: 'var(--f)' }}>G{r0(altMacros.f)}</span>
+                    <button className="iconbtn" style={{ color: '#e5484d' }} onClick={() => removeAlt(alt.id)}><Trash2 size={14} /></button>
+                  </div>
+                </div>
+                <div style={{ padding: '8px 14px 12px' }}>
+                  {alt.items.map(it => {
+                    const m = itemMacros(it);
+                    return (
+                      <div key={it.id} className="item" style={{ paddingLeft: 0 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="inm">{cleanName(it.name)}</div>
+                          <div className="iqt">{cleanName(it.label)}</div>
+                        </div>
+                        <div className="imac">{r0(m.kcal)} kcal · P{r0(m.p)} C{r0(m.c)} G{r0(m.f)}</div>
+                        <button className="iconbtn" onClick={() => removeItem(alt.id, it.id)}><Trash2 size={14} /></button>
+                      </div>
+                    );
+                  })}
+                  <button className="btn sm ghost" style={{ marginTop: 8 }} onClick={() => setFoodModalAlt({ altId: alt.id })}>
+                    <Plus size={14} /> Adicionar alimento
+                  </button>
+                  <div style={{ marginTop: 10 }}>
+                    <label className="lbl" style={{ fontSize: 12 }}>Modo de preparo / observação (opcional)</label>
+                    <textarea
+                      className="field"
+                      rows={2}
+                      style={{ fontSize: 13, resize: 'vertical' }}
+                      placeholder="Ex.: Bater no liquidificador, servir gelado…"
+                      value={alt.note}
+                      onChange={e => updateAlt(alt.id, { note: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          <button className="btn sm" style={{ background: 'var(--green-soft)', color: 'var(--green-d)', border: '1px solid #cde8d8' }} onClick={addAlt}>
+            <Plus size={14} /> Nova opção
+          </button>
+        </div>
+      )}
+
+      {foodModalAlt && (
+        <FoodModal
+          meal={meal}
+          foods={foods}
+          editItem={null}
+          onClose={() => setFoodModalAlt(null)}
+          onConfirm={(item) => { addItem(foodModalAlt.altId, item); setFoodModalAlt(null); }}
+        />
       )}
     </div>
   );

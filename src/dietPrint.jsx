@@ -32,6 +32,7 @@ export function DietPrintBody({ diet, patient, profile }) {
 
       {meals.map((meal) => {
         const mealSubs = (diet.mealSubs || {})[meal.id] || [];
+        const mealAlts = (diet.mealAlts || {})[meal.id] || [];
         return (
           <div className="dp-meal" key={meal.id}>
             <div className="dp-meal-head">
@@ -72,6 +73,25 @@ export function DietPrintBody({ diet, patient, profile }) {
                     {rs.note && (
                       <tr>
                         <td colSpan={2} style={{ paddingLeft: 14, paddingTop: 6, color: '#5d6f66', fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>{rs.note}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              ))}
+
+              {mealAlts.map((alt, idx) => (
+                <table className="dp-recipe" key={alt.id}>
+                  <tbody>
+                    <tr><td colSpan={2} className="dp-recipe-title">• Opção {idx + 1}</td></tr>
+                    {alt.items.map((it, j) => (
+                      <tr key={j}>
+                        <td style={{ paddingLeft: 14 }}>{cleanName(it.name)}</td>
+                        <td>{it.label || `${it.grams}g`}</td>
+                      </tr>
+                    ))}
+                    {alt.note?.trim() && (
+                      <tr>
+                        <td colSpan={2} style={{ paddingLeft: 14, paddingTop: 6, color: '#5d6f66', fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>{alt.note.trim()}</td>
                       </tr>
                     )}
                   </tbody>

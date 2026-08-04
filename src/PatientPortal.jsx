@@ -203,6 +203,24 @@ function PtDiets({ diets, patient }) {
                             </span>
                           </div>
                         ))}
+                        {((diet.mealAlts || {})[meal.id] || []).map((alt, idx) => (
+                          <div key={alt.id} style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed var(--line)' }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--green-d)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <Repeat size={12} /> Opção {idx + 1}
+                            </div>
+                            {alt.items.map((it, j) => (
+                              <div key={j} className="item" style={{ justifyContent: 'center', gap: 40 }}>
+                                <div style={{ width: 230, textAlign: 'center' }}>
+                                  <div className="inm">{cleanName(it.name) || it.foodId}</div>
+                                </div>
+                                <div className="imac" style={{ width: 140, marginLeft: 0, textAlign: 'center' }}>{it.label || `${it.grams}g`}</div>
+                              </div>
+                            ))}
+                            {alt.note?.trim() && (
+                              <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontStyle: 'italic', textAlign: 'center', marginTop: 6 }}>{alt.note.trim()}</div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
