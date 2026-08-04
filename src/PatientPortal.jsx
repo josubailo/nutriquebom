@@ -309,7 +309,7 @@ const EVAL_SUBTYPES = [
 ]
 
 function PtPhotos({ patient, photos, onAdd, onRemove }) {
-  const [photoMode,  setPhotoMode]  = useState('avaliacao') // 'progresso' | 'avaliacao'
+  const [photoMode,  setPhotoMode]  = useState('avaliacao')
   const [subType,    setSubType]    = useState('Frente')
   const [caption,    setCaption]    = useState('')
   const [obs,        setObs]        = useState('')
@@ -321,17 +321,25 @@ function PtPhotos({ patient, photos, onAdd, onRemove }) {
   const [quickWeight,    setQuickWeight]    = useState('')
   const [quickWeightOk,  setQuickWeightOk]  = useState(false)
   const [quickWeightLoading, setQuickWeightLoading] = useState(false)
+  const [weightHistory,  setWeightHistory]  = useState(null) // null = não carregado
+  const [showHistory,    setShowHistory]    = useState(false)
   const fileRef = useRef()
+  const nid = patient.nutritionistId || patient.nutritionist_id
+
+  const loadWeightHistory = async () => {
+    const rows = await db.loadPatientFeedbacks(nid, patient.id)
+    setWeightHistory((rows || []).filter(r => r.weight != null && r.source === 'patient'))
+  }
 
   const saveQuickWeight = async () => {
     const w = parseFloat(quickWeight)
     if (isNaN(w) || w <= 0) return
     setQuickWeightLoading(true)
-    const nid = patient.nutritionist_id || patient.nutritionistId
-    await db.insertPatientFeedback(nid, patient.id, { weight: w, content: null, source: 'patient' })
+    const { data } = await db.insertPatientFeedback(nid, patient.id, { weight: w, content: null, source: 'patient' })
     setQuickWeight('')
     setQuickWeightOk(true)
     setQuickWeightLoading(false)
+    if (data) setWeightHistory(prev => prev ? [data, ...prev] : [data])
     setTimeout(() => setQuickWeightOk(false), 3000)
   }
 
@@ -351,7 +359,6 @@ function PtPhotos({ patient, photos, onAdd, onRemove }) {
   const upload = async () => {
     if (!preview) return
     setLoading(true); setError('')
-    const nid = patient.nutritionist_id || patient.nutritionistId
     let finalCaption = ''
     if (photoMode === 'avaliacao') {
       finalCaption = `[Avaliação - ${subType}]${obs.trim() ? ' ' + obs.trim() : ''}`
@@ -364,12 +371,12 @@ function PtPhotos({ patient, photos, onAdd, onRemove }) {
     // Se o paciente informou o peso, registra automaticamente no histórico de feedbacks
     const w = parseFloat(photoWeight)
     if (!isNaN(w) && w > 0) {
-      const nid = patient.nutritionist_id || patient.nutritionistId
-      await db.insertPatientFeedback(nid, patient.id, {
+      const { data: fbData } = await db.insertPatientFeedback(nid, patient.id, {
         weight: w,
         content: null,
         source: 'patient',
       })
+      if (fbData) setWeightHistory(prev => prev ? [fbData, ...prev] : [fbData])
     }
     setCaption(''); setObs(''); setPreview(null); setSubType('Frente'); setPhotoWeight('')
     setSuccess(true)
@@ -515,8 +522,38 @@ function PtPhotos({ patient, photos, onAdd, onRemove }) {
               ? <><Check size={14} /> Salvo!</>
               : quickWeightLoading ? 'Salvando…' : <><Send size={14} /> Registrar</>}
           </button>
+          <button
+            className="btn sm ghost"
+            onClick={async () => {
+              if (!showHistory && weightHistory === null) await loadWeightHistory()
+              setShowHistory(h => !h)
+            }}
+          >
+            {showHistory ? <><ChevronUp size={14} /> Fechar histórico</> : <><ChevronDown size={14} /> Ver histórico</>}
+          </button>
         </div>
         <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 6 }}>Seu nutricionista poderá acompanhar sua evolução de peso.</div>
+
+        {showHistory && (
+          <div style={{ marginTop: 14, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>Histórico de pesos registrados</div>
+            {weightHistory === null
+              ? <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>Carregando…</div>
+              : weightHistory.length === 0
+              ? <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>Nenhum registro ainda.</div>
+              : weightHistory.map(r => (
+                <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--line)', fontSize: 13 }}>
+                  <span style={{ fontWeight: 700, color: 'var(--green-d)' }}>{r.weight} kg</span>
+                  <span style={{ color: 'var(--ink-soft)', fontSize: 12 }}>
+                    {new Date(r.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    {' '}
+                    {new Date(r.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              ))
+            }
+          </div>
+        )}
       </div>
 
       {photos.length === 0 ? (
