@@ -1230,6 +1230,7 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, recipes, mealT
                 onUpdate={(alts) => setDiet(d => ({ ...d, mealAlts: { ...(d.mealAlts || {}), [meal.id]: alts } }))}
                 mealTemplates={mealTemplates}
                 onDelMealTemplate={onDelMealTemplate}
+                onSaveMealTemplate={onSaveMealTemplate}
               />
             </div>
           </div>
@@ -1617,10 +1618,11 @@ function RecipeMealSubAdder({ recipes, mealItems, onAdd }) {
 }
 
 /* ── Opções de substituição de refeição (alternativas completas) ── */
-function MealAlternatives({ meal, foods, alts, onUpdate, mealTemplates, onDelMealTemplate }) {
+function MealAlternatives({ meal, foods, alts, onUpdate, mealTemplates, onDelMealTemplate, onSaveMealTemplate }) {
   const [open, setOpen] = useState(false);
   const [foodModalAlt, setFoodModalAlt] = useState(null); // {altId}
   const [tplPickerAlt, setTplPickerAlt] = useState(false);
+  const [saveTplAlt, setSaveTplAlt] = useState(null); // alt object to save as template
   const mainMacros = sumMacros(meal.items);
 
   const addAlt = () => {
@@ -1667,6 +1669,11 @@ function MealAlternatives({ meal, foods, alts, onUpdate, mealTemplates, onDelMea
                     <span style={{ color: 'var(--p)' }}>P{r0(altMacros.p)}</span>
                     <span style={{ color: 'var(--c)' }}>C{r0(altMacros.c)}</span>
                     <span style={{ color: 'var(--f)' }}>G{r0(altMacros.f)}</span>
+                    {onSaveMealTemplate && (
+                      <button className="iconbtn" title="Salvar como favorito" style={{ color: '#f5a623' }} onClick={() => setSaveTplAlt({ ...alt, name: `${meal.name} - Opção ${idx + 1}` })}>
+                        <Star size={14} />
+                      </button>
+                    )}
                     <button className="iconbtn" style={{ color: '#e5484d' }} onClick={() => removeAlt(alt.id)}><Trash2 size={14} /></button>
                   </div>
                 </div>
@@ -1727,6 +1734,15 @@ function MealAlternatives({ meal, foods, alts, onUpdate, mealTemplates, onDelMea
           }}
           onDel={onDelMealTemplate}
           onClose={() => setTplPickerAlt(false)}
+        />
+      )}
+
+      {saveTplAlt && (
+        <SaveMealTemplateModal
+          meal={saveTplAlt}
+          existing={mealTemplates || []}
+          onSave={(name) => { onSaveMealTemplate({ name, items: saveTplAlt.items.map(it => ({ ...it, id: uid() })) }); setSaveTplAlt(null); }}
+          onClose={() => setSaveTplAlt(null)}
         />
       )}
 
