@@ -1228,6 +1228,8 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, recipes, mealT
                 foods={foods}
                 alts={(diet.mealAlts || {})[meal.id] || []}
                 onUpdate={(alts) => setDiet(d => ({ ...d, mealAlts: { ...(d.mealAlts || {}), [meal.id]: alts } }))}
+                mealTemplates={mealTemplates}
+                onDelMealTemplate={onDelMealTemplate}
               />
             </div>
           </div>
@@ -1615,9 +1617,10 @@ function RecipeMealSubAdder({ recipes, mealItems, onAdd }) {
 }
 
 /* ── Opções de substituição de refeição (alternativas completas) ── */
-function MealAlternatives({ meal, foods, alts, onUpdate }) {
+function MealAlternatives({ meal, foods, alts, onUpdate, mealTemplates, onDelMealTemplate }) {
   const [open, setOpen] = useState(false);
   const [foodModalAlt, setFoodModalAlt] = useState(null); // {altId}
+  const [tplPickerAlt, setTplPickerAlt] = useState(false);
   const mainMacros = sumMacros(meal.items);
 
   const addAlt = () => {
@@ -1700,10 +1703,31 @@ function MealAlternatives({ meal, foods, alts, onUpdate }) {
             );
           })}
 
-          <button className="btn sm" style={{ background: 'var(--green-soft)', color: 'var(--green-d)', border: '1px solid #cde8d8' }} onClick={addAlt}>
-            <Plus size={14} /> Nova opção
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn sm" style={{ background: 'var(--green-soft)', color: 'var(--green-d)', border: '1px solid #cde8d8' }} onClick={addAlt}>
+              <Plus size={14} /> Nova opção
+            </button>
+            {(mealTemplates || []).length > 0 && (
+              <button className="btn sm ghost" style={{ color: '#f5a623', borderColor: '#f5a623' }} onClick={() => setTplPickerAlt(true)}>
+                <Star size={14} fill="#f5a623" /> Usar favorito
+              </button>
+            )}
+          </div>
         </div>
+      )}
+
+      {tplPickerAlt && (
+        <MealTemplatePicker
+          templates={mealTemplates || []}
+          onPick={(tpl) => {
+            const newAlt = { id: uid(), note: '', items: tpl.items.map(it => ({ ...it, id: uid() })) };
+            onUpdate([...(alts || []), newAlt]);
+            setTplPickerAlt(false);
+            setOpen(true);
+          }}
+          onDel={onDelMealTemplate}
+          onClose={() => setTplPickerAlt(false)}
+        />
       )}
 
       {foodModalAlt && (
