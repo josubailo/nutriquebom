@@ -872,6 +872,17 @@ function HistoryView({ patient, diets, onOpen, onNew, onDel, onDuplicate, onRena
           const tgt = computeTargets(d);
           const isRenaming = renamingId === d.id;
           const isActive = d.active === true;
+          const real = (d.meals || []).flatMap(m => m.items || []).reduce((acc, it) => {
+            const m = itemMacros(it);
+            return { kcal: acc.kcal + m.kcal, p: acc.p + m.p, c: acc.c + m.c, f: acc.f + m.f };
+          }, { kcal: 0, p: 0, c: 0, f: 0 });
+          const pct = (v, t) => t > 0 ? Math.min(100, Math.round(v / t * 100)) : 0;
+          const macroRows = [
+            { label: 'Kcal', real: real.kcal, tgt: tgt.kcal, col: '#1f9d63' },
+            { label: 'P',    real: real.p,    tgt: tgt.p,    col: 'var(--p)' },
+            { label: 'C',    real: real.c,    tgt: tgt.c,    col: 'var(--c)' },
+            { label: 'G',    real: real.f,    tgt: tgt.f,    col: 'var(--f)' },
+          ];
           return (
             <div className="panel" key={d.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: 18, flexWrap: "wrap", border: isActive ? '2px solid var(--green)' : undefined }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -891,15 +902,25 @@ function HistoryView({ patient, diets, onOpen, onNew, onDel, onDuplicate, onRena
                   </div>
                 )}
                 {!isRenaming && (
-                  <div className="sub" style={{ fontSize: 12.5, marginTop: 4 }}>
-                    {r0(tgt.kcal)} kcal · {r0(tgt.p)}g P / {r0(tgt.c)}g C / {r0(tgt.f)}g G
-                    <br />
-                    <span style={{ color: 'var(--ink-soft)' }}>
+                  <div style={{ marginTop: 8 }}>
+                    {macroRows.map(({ label, real: rv, tgt: tv, col }) => (
+                      <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: col, width: 28, flexShrink: 0 }}>{label}</span>
+                        <div style={{ flex: 1, height: 6, background: 'var(--line)', borderRadius: 99, overflow: 'hidden' }}>
+                          <div style={{ width: pct(rv, tv) + '%', height: '100%', background: col, borderRadius: 99, transition: 'width .3s' }} />
+                        </div>
+                        <span style={{ fontSize: 11.5, color: 'var(--ink-soft)', whiteSpace: 'nowrap', minWidth: 110, textAlign: 'right' }}>
+                          <b style={{ color: 'var(--ink)', fontWeight: 700 }}>{r0(rv)}</b>
+                          <span style={{ color: 'var(--ink-soft)' }}> / {r0(tv)}{label === 'Kcal' ? ' kcal' : 'g'} · {pct(rv, tv)}%</span>
+                        </span>
+                      </div>
+                    ))}
+                    <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginTop: 4 }}>
                       Criada: {new Date(d.createdAt).toLocaleDateString("pt-BR")}
                       {d.updatedAt && d.updatedAt !== d.createdAt && (
                         <span> · Modificada: {fmtTs(d.updatedAt)}</span>
                       )}
-                    </span>
+                    </div>
                   </div>
                 )}
               </div>
