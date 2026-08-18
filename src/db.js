@@ -16,6 +16,7 @@ export async function loadAll(nutritionistId) {
     { data: customFoods },
     { data: settings },
     { data: recipeRows },
+    { data: mealTemplateRows },
   ] = await Promise.all([
     supabase.from('patients').select('*').eq('nutritionist_id', nutritionistId).order('created_at', { ascending: false }),
     supabase.from('diets').select('*').eq('nutritionist_id', nutritionistId),
@@ -26,6 +27,7 @@ export async function loadAll(nutritionistId) {
     supabase.from('custom_foods').select('*').eq('nutritionist_id', nutritionistId),
     supabase.from('nutritionist_settings').select('*').eq('id', nutritionistId).maybeSingle(),
     supabase.from('recipes').select('*').eq('nutritionist_id', nutritionistId),
+    supabase.from('meal_templates').select('*').eq('nutritionist_id', nutritionistId).order('created_at', { ascending: false }),
   ])
 
   // Reconstrói o shape que o App.jsx espera
@@ -62,8 +64,25 @@ export async function loadAll(nutritionistId) {
     customFoods: (customFoods || []).map(f => ({ ...f.data, id: f.id })),
     profile: settings?.profile_data || {},
     anamneseTemplate: settings?.anamnese_template || null,
-    recipes: (recipeRows || []).map(r => ({ ...r.data, id: r.id, name: r.name })),
+    recipes:       (recipeRows      || []).map(r => ({ ...r.data, id: r.id, name: r.name })),
+    mealTemplates: (mealTemplateRows|| []).map(r => ({ ...r.data, id: r.id, name: r.name })),
   }
+}
+
+// ── Refeições favoritas (templates) ──────────────────────────
+export async function insertMealTemplate(nutritionistId, tpl) {
+  const { id, name, ...rest } = tpl
+  await supabase.from('meal_templates').insert({
+    id,
+    nutritionist_id: nutritionistId,
+    name: name || 'Refeição',
+    data: rest,
+  })
+}
+
+export async function deleteMealTemplate(nutritionistId, id) {
+  await supabase.from('meal_templates').delete()
+    .eq('id', id).eq('nutritionist_id', nutritionistId)
 }
 
 // ── Pacientes ────────────────────────────────────────────────

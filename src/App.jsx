@@ -5,7 +5,7 @@ import {
   Plus, Search, X, Copy, ChevronDown, ChevronUp, Pencil, Trash2,
   ArrowLeft, FileDown, Save, ClipboardList, Pill, Repeat, Mail, Phone, Cake,
   Camera, Ruler, Scale, TrendingUp, Percent, ImageIcon, Apple, FileText, LogOut,
-  Video, HelpCircle, Send, Lock, Clock, GripVertical, Minimize2, Maximize2, BarChart3, Type
+  Video, HelpCircle, Send, Lock, Clock, GripVertical, Minimize2, Maximize2, BarChart3, Type, Star
 } from "lucide-react";
 import { supabase } from "./supabase";
 import * as db from "./db";
@@ -484,6 +484,7 @@ export default function App() {
         anamneseTemplate: remote.anamneseTemplate || DEFAULT_ANAMNESE,
         foods:            [...seedFoods(), ...customFoods],
         recipes:          remote.recipes || [],
+        mealTemplates:    remote.mealTemplates || [],
       }));
       setLoaded(true);
     });
@@ -637,6 +638,18 @@ export default function App() {
     db.deleteRecipe(user.id, id);
   };
 
+  const mealTemplates = data.mealTemplates || [];
+  const addMealTemplate = (tpl) => {
+    const novo = { id: uid(), ...tpl };
+    setData((d) => ({ ...d, mealTemplates: [novo, ...(d.mealTemplates || [])] }));
+    db.insertMealTemplate(user.id, novo);
+    return novo;
+  };
+  const delMealTemplate = (id) => {
+    setData((d) => ({ ...d, mealTemplates: (d.mealTemplates || []).filter((x) => x.id !== id) }));
+    db.deleteMealTemplate(user.id, id);
+  };
+
   /* ── Render guards ── */
   const ADMIN_EMAIL = 'josuebailonutri@gmail.com';
   if (authLoading) return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', fontFamily: 'sans-serif', color: '#5d6f66' }}>Carregando…</div>;
@@ -729,7 +742,7 @@ export default function App() {
             view === "anamnese" ? <AnamneseView key={activePatient?.id} patient={activePatient} template={data.anamneseTemplate || DEFAULT_ANAMNESE} answers={anamneseOf(activePatient?.id)} onSaveAnswers={(a) => saveAnamnese(activePatient.id, a)} onSaveTemplate={saveTemplate} onPickPatient={() => setView("patients")} /> :
             view === "profile" ? <ProfileView profile={data.profile || {}} onSave={saveProfile} /> :
             view === "history" ? <HistoryView patient={activePatient} diets={dietsOf(activePatient?.id)} onOpen={(d) => openDiet(activePatient, d)} onNew={() => openNewDiet(activePatient)} onDel={(did) => delDiet(activePatient.id, did)} onDuplicate={(d) => { const copy = { ...JSON.parse(JSON.stringify(d)), id: uid(), name: d.name + " (cópia)", createdAt: Date.now(), active: false }; saveDiet(activePatient.id, copy); }} onRename={(did, name) => { const diet = dietsOf(activePatient.id).find(x => x.id === did); if (diet) saveDiet(activePatient.id, { ...diet, name }); }} onSetActive={(did) => { const cur = dietsOf(activePatient.id).find(d => d.id === did); if (cur) saveDiet(activePatient.id, { ...cur, active: !cur.active }); }} /> :
-            view === "builder" ? <Builder patient={activePatient} diet={activeDiet} setDiet={setActiveDiet} foods={allFoods} recipes={recipes} profile={data.profile || {}} onSave={() => { saveDiet(activePatient.id, activeDiet); setView("history"); }} onBack={() => setView("history")} /> :
+            view === "builder" ? <Builder patient={activePatient} diet={activeDiet} setDiet={setActiveDiet} foods={allFoods} recipes={recipes} mealTemplates={mealTemplates} onSaveMealTemplate={addMealTemplate} onDelMealTemplate={delMealTemplate} profile={data.profile || {}} onSave={() => { saveDiet(activePatient.id, activeDiet); setView("history"); }} onBack={() => setView("history")} /> :
             null}
         </main>
       </div>
@@ -1028,10 +1041,12 @@ function SaveDietModal({ onSave, onClose }) {
 }
 
 /* ---------- Builder ---------- */
-function Builder({ patient, diet, setDiet, onSave, onBack, foods, recipes, profile }) {
-  const [foodModal, setFoodModal] = useState(null); // {mealId}
+function Builder({ patient, diet, setDiet, onSave, onBack, foods, recipes, mealTemplates, onSaveMealTemplate, onDelMealTemplate, profile }) {
+  const [foodModal, setFoodModal] = useState(null);
   const [saveModal, setSaveModal] = useState(false);
-  const [renameItem, setRenameItem] = useState(null); // {mealId, itemId, val}
+  const [renameItem, setRenameItem] = useState(null);
+  const [tplPicker, setTplPicker] = useState(null); // 'new' | 'alt:{mealId}'
+  const [saveTplMeal, setSaveTplMeal] = useState(null); // meal object being starred
   const startRenameItem = (mealId, it) => setRenameItem({ mealId, itemId: it.id, val: cleanName(it.name) });
   const confirmRenameItem = () => {
     if (!renameItem) return;
@@ -1177,6 +1192,7 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, recipes, profi
                 <span style={{ color: "var(--c)" }}>CHO {r0(mm.c)}g</span>
                 <span style={{ color: "var(--f)" }}>LIP {r0(mm.f)}g</span>
                 <span style={{ color: "var(--fib)" }}>FIB {r0(mm.fib)}g</span>
+                <button className="iconbtn" title="Salvar como favorito" onClick={() => setSaveTplMeal(meal)} style={{ color: '#f5a623' }}><Star size={15} /></button>
                 <button className="iconbtn" title="Copiar refeição" onClick={() => setDiet((d) => { const idx = d.meals.findIndex((m) => m.id === meal.id); const copy = { ...JSON.parse(JSON.stringify(meal)), id: uid(), name: meal.name + " (cópia)", items: meal.items.map((it) => ({ ...it, id: uid() })) }; const meals = [...d.meals]; meals.splice(idx + 1, 0, copy); return { ...d, meals }; })}><Copy size={16} /></button>
                 <button className="iconbtn" title="Excluir refeição" onClick={() => setDiet((d) => ({ ...d, meals: d.meals.filter((m) => m.id !== meal.id) }))}><X size={16} /></button>
               </div>
@@ -1218,7 +1234,14 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, recipes, profi
         );
       })}
 
-      <button className="btn ghost" style={{ marginBottom: 24 }} onClick={() => setDiet((d) => ({ ...d, meals: [...d.meals, { id: uid(), name: "Nova Refeição", time: "12:00", items: [] }] }))}><Plus size={16} /> Adicionar refeição</button>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
+        <button className="btn ghost" onClick={() => setDiet((d) => ({ ...d, meals: [...d.meals, { id: uid(), name: "Nova Refeição", time: "12:00", items: [] }] }))}><Plus size={16} /> Adicionar refeição</button>
+        {mealTemplates.length > 0 && (
+          <button className="btn ghost" style={{ color: '#f5a623', borderColor: '#f5a623' }} onClick={() => setTplPicker('new')}>
+            <Star size={15} /> Usar favorito
+          </button>
+        )}
+      </div>
 
       {/* Micronutrientes, fibras e vitaminas */}
       <div className="panel">
@@ -1332,7 +1355,98 @@ function Builder({ patient, diet, setDiet, onSave, onBack, foods, recipes, profi
       </div>
 
       {saveModal && <SaveDietModal onSave={() => { setSaveModal(false); onSave(); }} onClose={() => setSaveModal(false)} />}
+
+      {/* Modal: salvar refeição como favorito */}
+      {saveTplMeal && (
+        <SaveMealTemplateModal
+          meal={saveTplMeal}
+          existing={mealTemplates}
+          onSave={(name) => { onSaveMealTemplate({ name, items: saveTplMeal.items.map(it => ({ ...it, id: uid() })) }); setSaveTplMeal(null); }}
+          onClose={() => setSaveTplMeal(null)}
+        />
+      )}
+
+      {/* Modal: escolher favorito para inserir */}
+      {tplPicker && (
+        <MealTemplatePicker
+          templates={mealTemplates}
+          onPick={(tpl) => {
+            const newMeal = { id: uid(), name: tpl.name, time: '12:00', items: tpl.items.map(it => ({ ...it, id: uid() })) };
+            setDiet((d) => ({ ...d, meals: [...d.meals, newMeal] }));
+            setTplPicker(null);
+          }}
+          onDel={onDelMealTemplate}
+          onClose={() => setTplPicker(null)}
+        />
+      )}
     </>
+  );
+}
+
+/* ── Modal: salvar refeição como favorito ── */
+function SaveMealTemplateModal({ meal, existing, onSave, onClose }) {
+  const [name, setName] = useState(meal.name);
+  const macros = sumMacros(meal.items);
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 18, padding: 28, width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,.2)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+          <Star size={20} fill="#f5a623" color="#f5a623" />
+          <h2 style={{ margin: 0, fontSize: 18 }}>Salvar refeição favorita</h2>
+        </div>
+        <label className="lbl">Nome do favorito</label>
+        <input className="field" value={name} onChange={e => setName(e.target.value)} autoFocus
+          onKeyDown={e => { if (e.key === 'Enter' && name.trim()) onSave(name.trim()); }} />
+        <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', margin: '8px 0 18px' }}>
+          {meal.items.length} alimento(s) · {r0(macros.kcal)} kcal · P{r0(macros.p)} C{r0(macros.c)} G{r0(macros.f)}
+        </div>
+        {existing.some(t => t.name.toLowerCase() === name.trim().toLowerCase()) && (
+          <div style={{ fontSize: 12, color: '#e5484d', marginBottom: 10 }}>Já existe um favorito com esse nome. Salvar irá criar um duplicado.</div>
+        )}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button className="btn ghost" onClick={onClose}>Cancelar</button>
+          <button className="btn" disabled={!name.trim()} onClick={() => onSave(name.trim())}>
+            <Star size={14} /> Salvar favorito
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Modal: escolher refeição favorita ── */
+function MealTemplatePicker({ templates, onPick, onDel, onClose }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 18, padding: 28, width: '100%', maxWidth: 480, maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.2)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          <Star size={20} fill="#f5a623" color="#f5a623" />
+          <h2 style={{ margin: 0, fontSize: 18 }}>Refeições favoritas</h2>
+        </div>
+        {templates.length === 0 && <div style={{ color: 'var(--ink-soft)', fontSize: 14, textAlign: 'center', padding: 20 }}>Nenhum favorito salvo. Clique na ⭐ de uma refeição para salvar.</div>}
+        {templates.map(tpl => {
+          const macros = sumMacros(tpl.items || []);
+          return (
+            <div key={tpl.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{tpl.name}</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 3 }}>
+                  {(tpl.items || []).length} alimento(s) · {r0(macros.kcal)} kcal · P{r0(macros.p)} C{r0(macros.c)} G{r0(macros.f)}
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginTop: 2 }}>
+                  {(tpl.items || []).map(it => cleanName(it.name)).join(', ')}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn sm" onClick={() => onPick(tpl)}>Usar</button>
+                {onDel && <button className="iconbtn" style={{ color: '#e5484d' }} title="Remover favorito" onClick={() => onDel(tpl.id)}><Trash2 size={14} /></button>}
+              </div>
+            </div>
+          );
+        })}
+        <button className="btn ghost" style={{ marginTop: 16, width: '100%' }} onClick={onClose}>Fechar</button>
+      </div>
+    </div>
   );
 }
 
