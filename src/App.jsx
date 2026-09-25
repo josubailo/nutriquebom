@@ -450,7 +450,7 @@ export default function App() {
   useEffect(() => {
     if (!user) { setProfile(null); setPatientData(null); return; }
     supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
-      .then(({ data }) => setProfile(data));
+      .then(({ data }) => setProfile(data ?? { role: 'nutritionist' }));
   }, [user]);
 
   /* ── Dados do app ── */
