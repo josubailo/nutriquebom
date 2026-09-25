@@ -651,7 +651,6 @@ export default function App() {
   };
 
   /* ── Render guards ── */
-  const ADMIN_EMAIL = 'josuebailonutri@gmail.com';
   if (authLoading) return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', fontFamily: 'sans-serif', color: '#5d6f66' }}>Carregando…</div>;
   if (!user) return <Login />;
 
@@ -662,8 +661,8 @@ export default function App() {
   if (profile.role === 'patient' && patientData) return <PatientPortal patientData={patientData} user={user} />;
   if (profile.role === 'patient' && !patientData) return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', fontFamily: 'sans-serif', color: '#5d6f66' }}>Carregando dados…</div>;
 
-  // Bloqueia qualquer usuário que não seja o admin
-  if (user.email !== ADMIN_EMAIL) {
+  // Conta sem role definida — acesso bloqueado (ex: conta criada fora do fluxo normal)
+  if (false) {
     return (
       <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f4f6f3', fontFamily: "'DM Sans', sans-serif" }}>
         <div style={{ textAlign: 'center', maxWidth: 360, padding: 32 }}>
